@@ -1,16 +1,25 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.database import get_db, create_tables
 from app.config import settings
-from app.api import players, sources, dashboard
+from app.api import players, sources, dashboard, sleeper, team_dashboard
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    create_tables()
+    yield
+    # Shutdown (add any cleanup here if needed)
 
 # Create FastAPI application
 app = FastAPI(
     title="Fantasy Football Dashboard API",
     description="Comprehensive fantasy football data aggregation and analysis",
     version="1.0.0",
-    debug=settings.debug
+    debug=settings.debug,
+    lifespan=lifespan
 )
 
 # Add CORS middleware
@@ -26,6 +35,8 @@ app.add_middleware(
 app.include_router(players.router, prefix="/api/v1/players", tags=["players"])
 app.include_router(sources.router, prefix="/api/v1/sources", tags=["sources"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
+app.include_router(sleeper.router, prefix="/api/v1/sleeper", tags=["sleeper"])
+app.include_router(team_dashboard.router, prefix="/api/v1/team", tags=["team-dashboard"])
 
 @app.on_event("startup")
 async def startup_event():
@@ -41,7 +52,8 @@ async def root():
         "endpoints": {
             "players": "/api/v1/players",
             "sources": "/api/v1/sources", 
-            "dashboard": "/api/v1/dashboard"
+            "dashboard": "/api/v1/dashboard",
+            "sleeper": "/api/v1/sleeper"
         }
     }
 

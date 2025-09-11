@@ -5,6 +5,7 @@ from app.database import get_db
 from app.models.players import Player, NFLTeam
 from app.models.rankings import Ranking
 from app.models.sources import Source
+from app.models.sleeper import SleeperLeague, SleeperPlayer
 from pydantic import BaseModel
 from typing import List, Optional
 
@@ -15,6 +16,8 @@ class DashboardStats(BaseModel):
     total_sources: int
     total_rankings: int
     active_sources: int
+    sleeper_leagues: int
+    sleeper_players: int
 
 class TopPlayer(BaseModel):
     player_id: str
@@ -24,20 +27,45 @@ class TopPlayer(BaseModel):
     avg_rank: float
     ranking_count: int
 
+class SleeperLeagueStats(BaseModel):
+    league_id: str
+    league_name: str
+    season: str
+    total_rosters: int
+    last_synced: str
+
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats(db: Session = Depends(get_db)):
-    """Get basic dashboard statistics"""
+    """Get basic dashboard statistics including Sleeper data"""
     total_players = db.query(Player).count()
     total_sources = db.query(Source).count()
     total_rankings = db.query(Ranking).count()
     active_sources = db.query(Source).filter(Source.is_active == True).count()
+    sleeper_leagues = db.query(SleeperLeague).count()
+    sleeper_players = db.query(SleeperPlayer).count()
     
     return DashboardStats(
         total_players=total_players,
         total_sources=total_sources,
         total_rankings=total_rankings,
-        active_sources=active_sources
+        active_sources=active_sources,
+        sleeper_leagues=sleeper_leagues,
+        sleeper_players=sleeper_players
     )
+
+@router.get("/sleeper/leagues", response_model=List[SleeperLeagueStats])
+async def get_sleeper_leagues(db: Session = Depends(get_db)):
+    """Get all synced Sleeper leagues"""
+    leagues = db.query(SleeperLeague).all()
+    return [
+        SleeperLeagueStats(
+            league_id=league.league_id,
+            league_name=league.league_name or "Unknown League",
+            season=league.season,
+            total_rosters=league.total_rosters or 0,
+            last_synced=league.last_synced.strftime("%Y-%m-%d %H:%M") if league.last_synced else "Never"
+        ) for league in leagues
+    ]
 
 @router.get("/top-players", response_model=List[TopPlayer])
 async def get_top_players(

@@ -61,7 +61,7 @@ async def get_player(player_id: str, db: Session = Depends(get_db)):
 async def get_player_rankings(
     player_id: str, 
     week: Optional[int] = None,
-    year: int = 2024,
+    year: int = 2025,
     db: Session = Depends(get_db)
 ):
     """Get rankings for a specific player"""

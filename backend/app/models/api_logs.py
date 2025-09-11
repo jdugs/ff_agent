@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, JSON, Text, BigInteger, Boolean, DECIMAL
+from sqlalchemy import Column, String, Integer, DECIMAL, DateTime, JSON, Text, BigInteger, Boolean, ForeignKey
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .base import Base, TimestampMixin
@@ -7,7 +7,7 @@ class APICallLog(Base):
     __tablename__ = "api_call_logs"
     
     log_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    source_id = Column(Integer, nullable=False, index=True)
+    source_id = Column(Integer, ForeignKey('sources.source_id'), nullable=False, index=True)
     endpoint = Column(String(200), nullable=False, index=True)
     http_method = Column(String(10), default='GET')
     status_code = Column(Integer)
@@ -21,13 +21,13 @@ class APICallLog(Base):
     timestamp = Column(DateTime, default=func.now(), nullable=False, index=True)
     
     # Relationships
-    source = relationship("Source", back_populates="api_calls")
+    source = relationship("Source")
 
 class PlayerIDMapping(Base, TimestampMixin):
     __tablename__ = "player_id_mappings"
     
     mapping_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    our_player_id = Column(String(50), nullable=False, index=True)
+    our_player_id = Column(String(50), ForeignKey('players.player_id'), nullable=False, index=True)
     external_system = Column(String(50), nullable=False, index=True)
     external_player_id = Column(String(100), nullable=False, index=True)
     confidence_score = Column(DECIMAL(3, 2), default=1.00)
@@ -35,4 +35,4 @@ class PlayerIDMapping(Base, TimestampMixin):
     last_verified = Column(DateTime)
     
     # Relationships
-    player = relationship("Player", back_populates="id_mappings")
+    player = relationship("Player")
