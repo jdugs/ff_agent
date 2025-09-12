@@ -56,8 +56,19 @@ export class ApiClient {
 
   // Team Dashboard
   static async getTeamDashboard(leagueId: string, userId: string, week?: number): Promise<TeamDashboard> {
-    const url = `/api/v1/team/${leagueId}/${userId}${week ? `?week=${week}` : ''}`;
-    const response = await api.get(url);
+    const params = new URLSearchParams({
+      league_id: leagueId,
+      owner_id: userId,
+      include_stats: 'true',
+      include_news: 'false', 
+      include_photos: 'false'
+    });
+    
+    if (week) {
+      params.append('week', week.toString());
+    }
+    
+    const response = await api.get(`/api/v1/dashboard/roster?${params}`);
     return response.data;
   }
 

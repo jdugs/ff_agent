@@ -285,6 +285,13 @@ class SleeperService:
             existing.years_exp = player_data.get('years_exp')
             existing.status = mapped_status  # Use mapped status
             existing.fantasy_positions = player_data.get('fantasy_positions', [])
+            
+            # Update external IDs
+            existing.espn_id = player_data.get('espn_id')
+            existing.rotowire_id = player_data.get('rotowire_id')
+            existing.fantasy_data_id = player_data.get('fantasy_data_id')
+            existing.yahoo_id = player_data.get('yahoo_id')
+            existing.stats_id = player_data.get('stats_id')
         else:
             # Create new
             sleeper_player = SleeperPlayer(
@@ -300,7 +307,14 @@ class SleeperService:
                 college=player_data.get('college'),
                 years_exp=player_data.get('years_exp'),
                 status=mapped_status,  # Use mapped status
-                fantasy_positions=player_data.get('fantasy_positions', [])
+                fantasy_positions=player_data.get('fantasy_positions', []),
+                
+                # External IDs
+                espn_id=player_data.get('espn_id'),
+                rotowire_id=player_data.get('rotowire_id'),
+                fantasy_data_id=player_data.get('fantasy_data_id'),
+                yahoo_id=player_data.get('yahoo_id'),
+                stats_id=player_data.get('stats_id')
             )
             self.db.add(sleeper_player)
     

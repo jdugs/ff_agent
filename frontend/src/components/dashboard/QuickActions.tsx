@@ -55,16 +55,16 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ team }) => {
       <div className="mt-6 pt-4 border-t border-dark-700">
         <div className="text-sm space-y-2">
           <div className="flex justify-between">
-            <span className="text-dark-400">Strong Starts:</span>
-            <span className="text-success-400">{team.weekly_outlook.strong_starts}</span>
+            <span className="text-dark-400">Starters:</span>
+            <span className="text-success-400">{team.data.roster_summary.starters_count}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-dark-400">Flex Decisions:</span>
-            <span className="text-warning-400">{team.weekly_outlook.flex_plays}</span>
+            <span className="text-dark-400">Bench:</span>
+            <span className="text-warning-400">{team.data.roster_summary.bench_count}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-dark-400">Concerns:</span>
-            <span className="text-danger-400">{team.weekly_outlook.concerning_starts}</span>
+            <span className="text-dark-400">Total Players:</span>
+            <span className="text-primary-400">{team.data.roster_summary.total_players}</span>
           </div>
         </div>
       </div>

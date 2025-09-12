@@ -73,12 +73,12 @@ export default function DashboardPage() {
       <TeamOverview team={currentTeam} />
 
       {/* Starting Lineup */}
-      <StartingLineup players={currentTeam.starters} />
+      <StartingLineup players={currentTeam.data.lineup.starters} />
 
       {/* Bottom Row - Actions, News, Waiver */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <QuickActions team={currentTeam} />
-        <RecentNews players={currentTeam.starters} />
+        <RecentNews players={currentTeam.data.lineup.starters} />
         <WaiverTargets />
       </div>
     </div>

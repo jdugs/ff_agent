@@ -9,10 +9,23 @@ interface PlayerRankingsPanelProps {
 }
 
 export const PlayerRankingsPanel: React.FC<PlayerRankingsPanelProps> = ({ player }) => {
-  if (player.rankings.length === 0) {
+  const rankings = player.rankings || [];
+  
+  if (rankings.length === 0) {
     return (
       <div className="text-center py-12 text-dark-400">
         <p>No rankings available for this player</p>
+        {player.projections && (
+          <div className="mt-4">
+            <p className="text-sm text-dark-300">But we have consensus projections!</p>
+            <div className="mt-2 text-lg font-bold text-success-400">
+              {player.projections.fantasy_points.toFixed(1)} projected points
+            </div>
+            <p className="text-xs text-dark-400">
+              From {player.projections.meta.provider_count} provider(s)
+            </p>
+          </div>
+        )}
       </div>
     );
   }
@@ -30,7 +43,7 @@ export const PlayerRankingsPanel: React.FC<PlayerRankingsPanelProps> = ({ player
               Consensus Position Rank
             </div>
             <div className="text-xs text-dark-400 mt-1">
-              Based on {player.rankings.length} sources
+              Based on {rankings.length} sources
             </div>
           </div>
         </Card>
@@ -39,7 +52,7 @@ export const PlayerRankingsPanel: React.FC<PlayerRankingsPanelProps> = ({ player
       {/* Individual Rankings */}
       <div className="space-y-3">
         <h3 className="text-lg font-semibold text-white">Source Rankings</h3>
-        {player.rankings.map((ranking, index) => (
+        {rankings.map((ranking, index) => (
           <Card key={index} className="bg-dark-700">
             <div className="flex items-center justify-between">
               <div>

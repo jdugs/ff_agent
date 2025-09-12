@@ -46,7 +46,7 @@ export const PlayerModal: React.FC = () => {
           <div className="flex-1">
             <div className="flex items-center space-x-3 mb-2">
               <h2 className="text-2xl font-bold text-white">
-                {selectedPlayer.name}
+                {selectedPlayer.player_name}
               </h2>
               <Badge className={positionColor}>
                 {selectedPlayer.position}
@@ -56,9 +56,9 @@ export const PlayerModal: React.FC = () => {
               </Badge>
             </div>
             
-            {selectedPlayer.injury_status && (
+            {selectedPlayer.player_details?.status && selectedPlayer.player_details.status !== 'Active' && (
               <p className="text-danger-400 mb-2">
-                Status: {selectedPlayer.injury_status}
+                Status: {selectedPlayer.player_details.status}
               </p>
             )}
             
@@ -72,11 +72,20 @@ export const PlayerModal: React.FC = () => {
                 </div>
               )}
               
-              {selectedPlayer.latest_projection && (
+              {(selectedPlayer.latest_projection || selectedPlayer.projections?.fantasy_points) && (
                 <div>
                   <span className="text-dark-400">Projection: </span>
                   <span className="text-success-400 font-medium">
-                    {formatPoints(selectedPlayer.latest_projection)} pts
+                    {formatPoints(selectedPlayer.projections?.fantasy_points || selectedPlayer.latest_projection || 0)} pts
+                  </span>
+                </div>
+              )}
+
+              {selectedPlayer.projections?.meta && (
+                <div>
+                  <span className="text-dark-400">Providers: </span>
+                  <span className="text-primary-400 font-medium">
+                    {selectedPlayer.projections.meta.provider_count}
                   </span>
                 </div>
               )}
@@ -99,13 +108,13 @@ export const PlayerModal: React.FC = () => {
         </div>
 
         {/* Red Flags */}
-        {selectedPlayer.red_flags.length > 0 && (
+        {(selectedPlayer.red_flags?.length || 0) > 0 && (
           <Card className="bg-danger-500/10 border-danger-500/30">
             <h3 className="text-lg font-semibold text-danger-400 mb-2">
               ⚠️ Alerts
             </h3>
             <ul className="space-y-1">
-              {selectedPlayer.red_flags.map((flag, index) => (
+              {selectedPlayer.red_flags?.map((flag, index) => (
                 <li key={index} className="text-sm text-danger-300">
                   • {flag}
                 </li>

@@ -42,8 +42,8 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     large: 'p-4',
   };
 
-  const statusColor = getStatusColor(player.start_sit_recommendation, player.red_flags);
-  const statusIcon = getStatusIcon(player.start_sit_recommendation, player.red_flags);
+  const statusColor = getStatusColor(player.start_sit_recommendation, player.red_flags || []);
+  const statusIcon = getStatusIcon(player.start_sit_recommendation, player.red_flags || []);
   const positionColor = getPositionColor(player.position);
 
   return (
@@ -66,14 +66,14 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
                 {player.position}
               </Badge>
               <span className="text-xs text-dark-400">{player.team}</span>
-              {player.red_flags.length > 0 && (
-                <Tooltip content={player.red_flags.join(', ')}>
+              {(player.red_flags?.length || 0) > 0 && (
+                <Tooltip content={player.red_flags?.join(', ') || ''}>
                   <span className="text-danger-400">⚠️</span>
                 </Tooltip>
               )}
             </div>
             <h3 className="font-semibold text-white text-sm truncate">
-              {player.name}
+              {player.player_name}
             </h3>
             {player.injury_status && (
               <p className="text-xs text-danger-400">
@@ -103,9 +103,9 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
               </div>
             )}
             
-            {player.rankings.length > 0 && (
+            {(player.rankings?.length || 0) > 0 && (
               <div className="flex items-center space-x-2">
-                {player.rankings.slice(0, 3).map((ranking, index) => (
+                {player.rankings?.slice(0, 3).map((ranking, index) => (
                   <Tooltip 
                     key={index}
                     content={`${ranking.source_name}: #${ranking.position_rank}`}
@@ -115,28 +115,38 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
                     </div>
                   </Tooltip>
                 ))}
-                {player.rankings.length > 3 && (
+                {(player.rankings?.length || 0) > 3 && (
                   <span className="text-xs text-dark-400">
-                    +{player.rankings.length - 3} more
+                    +{(player.rankings?.length || 0) - 3} more
                   </span>
                 )}
+              </div>
+            )}
+            
+            {/* New: Show consensus projections */}
+            {player.projections && (
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-dark-400">Providers:</span>
+                <span className="text-sm font-medium text-primary-400">
+                  {player.projections.meta.provider_count}
+                </span>
               </div>
             )}
           </div>
         )}
 
         {/* Projection */}
-        {showProjection && player.latest_projection && (
+        {showProjection && (player.latest_projection || player.projections) && (
           <div className="flex items-center justify-between pt-2 border-t border-dark-700">
             <span className="text-xs text-dark-400">Projected:</span>
             <span className="text-sm font-medium text-success-400">
-              {formatPoints(player.latest_projection)} pts
+              {formatPoints(player.projections?.fantasy_points || player.latest_projection || 0)} pts
             </span>
           </div>
         )}
 
         {/* Confidence Score */}
-        {player.confidence_score && (
+        {(player.confidence_score || player.projections?.meta.confidence_score) && (
           <div className="flex items-center justify-between">
             <span className="text-xs text-dark-400">Confidence:</span>
             <div className="flex items-center space-x-1">
@@ -144,14 +154,14 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
                 <div 
                   className={cn(
                     'h-1.5 rounded-full transition-all',
-                    player.confidence_score > 0.8 ? 'bg-success-500' :
-                    player.confidence_score > 0.6 ? 'bg-warning-500' : 'bg-danger-500'
+                    (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.8 ? 'bg-success-500' :
+                    (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.6 ? 'bg-warning-500' : 'bg-danger-500'
                   )}
-                  style={{ width: `${player.confidence_score * 100}%` }}
+                  style={{ width: `${((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100}%` }}
                 />
               </div>
               <span className="text-xs text-white">
-                {Math.round(player.confidence_score * 100)}%
+                {Math.round(((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100)}%
               </span>
             </div>
           </div>

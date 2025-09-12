@@ -68,21 +68,22 @@ export const Header: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="text-dark-400">Record:</span>
                 <span className="text-white font-medium">
-                  {currentTeam.team_record}
+                  {currentTeam.data.roster_summary.team_record.wins}-{currentTeam.data.roster_summary.team_record.losses}
+                  {currentTeam.data.roster_summary.team_record.ties > 0 && `-${currentTeam.data.roster_summary.team_record.ties}`}
                 </span>
               </div>
               
               <div className="flex items-center space-x-2">
-                <span className="text-dark-400">Rank:</span>
-                <span className="text-white font-medium">
-                  #{currentTeam.league_rank || '?'}
+                <span className="text-dark-400">Projected:</span>
+                <span className="text-success-400 font-medium">
+                  {currentTeam.data.roster_summary.projected_points_total.toFixed(1)}
                 </span>
               </div>
               
               <div className="flex items-center space-x-2">
-                <span className="text-dark-400">Points:</span>
+                <span className="text-dark-400">Points For:</span>
                 <span className="text-white font-medium">
-                  {currentTeam.points_for.toFixed(1)}
+                  {currentTeam.data.roster_summary.team_record.points_for.toFixed(1)}
                 </span>
               </div>
             </div>

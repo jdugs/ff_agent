@@ -66,11 +66,18 @@ export const useTeamStore = create<TeamState>()(
       set({ isLoadingTeam: true, error: null });
 
       try {
-        const teamData = await ApiClient.getTeamDashboard(
+        const teamResponse = await ApiClient.getTeamDashboard(
           selectedLeagueId,
           selectedUserId,
           currentWeek
         );
+        
+        // Transform new API response to match current UI expectations
+        const teamData: TeamDashboard = {
+          success: teamResponse.success,
+          data: teamResponse.data
+        };
+        
         set({ currentTeam: teamData, isLoadingTeam: false });
       } catch (error) {
         console.error('Failed to load team dashboard:', error);

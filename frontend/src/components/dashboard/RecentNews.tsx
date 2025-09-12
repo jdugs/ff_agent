@@ -13,7 +13,10 @@ export const RecentNews: React.FC<RecentNewsProps> = ({ players }) => {
   // Aggregate all news from starters
   const allNews = players
     .flatMap(player => 
-      player.recent_news.map(news => ({ ...news, playerName: player.name }))
+      (player.recent_news || player.news_alerts || []).map(news => ({ 
+        ...news, 
+        playerName: player.player_name || 'Unknown Player' 
+      }))
     )
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
     .slice(0, 5);
@@ -44,7 +47,7 @@ export const RecentNews: React.FC<RecentNewsProps> = ({ players }) => {
                       variant={news.severity === 'high' ? 'danger' : 'warning'} 
                       size="sm"
                     >
-                      {news.event_type}
+                      {(news as any).event_type || (news as any).type || 'Update'}
                     </Badge>
                     <span className="text-xs text-dark-500">
                       {formatTimeAgo(news.timestamp)}

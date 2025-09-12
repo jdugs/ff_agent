@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from app.database import get_db, create_tables
 from app.config import settings
-from app.api import players, sources, dashboard, sleeper, team_dashboard
+from app.api import players, sources, dashboard, sleeper, team_dashboard, projections
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -37,6 +37,7 @@ app.include_router(sources.router, prefix="/api/v1/sources", tags=["sources"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(sleeper.router, prefix="/api/v1/sleeper", tags=["sleeper"])
 app.include_router(team_dashboard.router, prefix="/api/v1/team", tags=["team-dashboard"])
+app.include_router(projections.router, prefix="/api/v1/projections", tags=["projections"])
 
 @app.on_event("startup")
 async def startup_event():

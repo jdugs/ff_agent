@@ -63,6 +63,14 @@ class SleeperPlayer(Base, TimestampMixin):
     years_exp = Column(Integer)
     status = Column(Enum('Active', 'Inactive', 'Injured Reserve', 'Reserve/PUP', name='player_status'), default='Active')
     fantasy_positions = Column(JSON)
+    
+    # External IDs for multi-source integration
+    espn_id = Column(String(50), index=True)
+    rotowire_id = Column(String(50), index=True)
+    fantasy_data_id = Column(String(50), index=True)
+    yahoo_id = Column(String(50), index=True)
+    stats_id = Column(String(50), index=True)  # For stats.com or similar
+    
     last_updated = Column(DateTime, default=func.now(), onupdate=func.now())
     
     # Relationships

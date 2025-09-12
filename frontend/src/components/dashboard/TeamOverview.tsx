@@ -2,7 +2,7 @@ import React from 'react';
 import type { TeamDashboard } from '@/lib/types';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { formatPoints, formatRecord } from '@/lib/utils';
+import { formatPoints } from '@/lib/utils';
 import { TEAM_HEALTH_CONFIG } from '@/lib/constants';
 import { TrendingUp, Target, Award } from 'lucide-react';
 
@@ -11,8 +11,15 @@ interface TeamOverviewProps {
 }
 
 export const TeamOverview: React.FC<TeamOverviewProps> = ({ team }) => {
-  const healthConfig = TEAM_HEALTH_CONFIG[team.team_summary.team_health];
-
+  const { roster_summary, metadata, quick_stats } = team.data;
+  
+  // Calculate team health based on projections and provider coverage
+  const teamHealth = 'good'; // Default for now - could calculate based on confidence scores
+  const healthConfig = TEAM_HEALTH_CONFIG[teamHealth] || { icon: '💪', color: 'text-success-400' };
+  
+  // Format record string
+  const recordString = `${roster_summary.team_record.wins}-${roster_summary.team_record.losses}${roster_summary.team_record.ties > 0 ? `-${roster_summary.team_record.ties}` : ''}`;
+  
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
       {/* Team Record */}
@@ -23,16 +30,16 @@ export const TeamOverview: React.FC<TeamOverviewProps> = ({ team }) => {
           </div>
           <div>
             <div className="text-2xl font-bold text-white">
-              {formatRecord(team.team_record)}
+              {recordString}
             </div>
             <div className="text-sm text-dark-400">
-              League Rank #{team.league_rank || '?'} / 12
+              {formatPoints(roster_summary.team_record.points_for)} PF • {formatPoints(roster_summary.team_record.points_against)} PA
             </div>
           </div>
         </div>
       </Card>
 
-      {/* Weekly Outlook */}
+      {/* Weekly Projections */}
       <Card>
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-success-500/20 rounded-lg">
@@ -40,23 +47,19 @@ export const TeamOverview: React.FC<TeamOverviewProps> = ({ team }) => {
           </div>
           <div>
             <div className="text-2xl font-bold text-white">
-              {formatPoints(team.team_summary.projected_points)}
+              {formatPoints(roster_summary.projected_points_total)}
             </div>
             <div className="text-sm text-dark-400">
-              Week {team.weekly_outlook.week} Projection
+              {metadata.week ? `Week ${metadata.week}` : `${metadata.season} Season`} Projection
             </div>
-            <Badge 
-              variant={team.weekly_outlook.outlook === 'strong' ? 'success' : 
-                      team.weekly_outlook.outlook === 'moderate' ? 'warning' : 'danger'}
-              size="sm"
-            >
-              {team.weekly_outlook.outlook}
+            <Badge variant="success" size="sm">
+              Consensus
             </Badge>
           </div>
         </div>
       </Card>
 
-      {/* Team Health */}
+      {/* Team Composition */}
       <Card>
         <div className="flex items-center space-x-3">
           <div className="p-2 bg-warning-500/20 rounded-lg">
@@ -66,11 +69,11 @@ export const TeamOverview: React.FC<TeamOverviewProps> = ({ team }) => {
             <div className="flex items-center space-x-2">
               <span className="text-2xl">{healthConfig.icon}</span>
               <span className={`text-lg font-medium ${healthConfig.color}`}>
-                {team.team_summary.team_health}
+                {roster_summary.starters_count} Starters
               </span>
             </div>
             <div className="text-sm text-dark-400">
-              {team.team_summary.total_red_flags} alerts • {team.team_summary.injured_starters} injured starters
+              {roster_summary.bench_count} bench • {roster_summary.total_players} total
             </div>
           </div>
         </div>
