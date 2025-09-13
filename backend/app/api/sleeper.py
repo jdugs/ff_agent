@@ -4,7 +4,7 @@ from typing import List, Optional
 from app.config import settings
 from app.database import get_db
 from app.services.sleeper_service import SleeperService
-from app.models.sleeper import SleeperLeague, SleeperRoster
+from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -341,5 +341,176 @@ async def get_player_stats(
             "season_type": season_type,
             "stats": stats
         }
+    finally:
+        await service.close()
+
+@router.get("/league/{league_id}/matchups/{week}")
+async def get_league_matchups(
+    league_id: str,
+    week: int,
+    db: Session = Depends(get_db)
+):
+    """Get matchups for a specific week"""
+    service = SleeperService(db)
+    try:
+        # First try to get from database
+        from app.models.sleeper import SleeperMatchup
+        matchups = db.query(SleeperMatchup).filter(
+            SleeperMatchup.league_id == league_id,
+            SleeperMatchup.week == week
+        ).all()
+        
+        if not matchups:
+            # Sync from API if not in database
+            matchups = await service.sync_league_matchups(league_id, week)
+        
+        return [
+            {
+                'roster_id': matchup.roster_id,
+                'matchup_id': matchup.matchup_id_sleeper,
+                'points': float(matchup.points) if matchup.points else 0,
+                'points_for': float(matchup.points_for) if matchup.points_for else 0,
+                'starters': matchup.starters,
+                'starters_points': matchup.starters_points,
+                'players_points': matchup.players_points
+            } for matchup in matchups
+        ]
+    finally:
+        await service.close()
+
+@router.get("/league/{league_id}/my-matchup/{week}")
+async def get_my_matchup(
+    league_id: str,
+    week: int,
+    user_id: str,
+    db: Session = Depends(get_db)
+):
+    """Get the current user's matchup for a specific week"""
+    service = SleeperService(db)
+    try:
+        from app.models.sleeper import SleeperMatchup, SleeperRoster
+        
+        # Find user's roster
+        my_roster = db.query(SleeperRoster).filter(
+            SleeperRoster.league_id == league_id,
+            SleeperRoster.owner_id == user_id
+        ).first()
+        
+        if not my_roster:
+            raise HTTPException(status_code=404, detail="Your roster not found")
+        
+        # Find user's matchup
+        my_matchup = db.query(SleeperMatchup).filter(
+            SleeperMatchup.league_id == league_id,
+            SleeperMatchup.week == week,
+            SleeperMatchup.roster_id == my_roster.roster_id
+        ).first()
+        
+        if not my_matchup:
+            # Try to sync matchups if not found
+            await service.sync_league_matchups(league_id, week)
+            my_matchup = db.query(SleeperMatchup).filter(
+                SleeperMatchup.league_id == league_id,
+                SleeperMatchup.week == week,
+                SleeperMatchup.roster_id == my_roster.roster_id
+            ).first()
+        
+        if not my_matchup:
+            raise HTTPException(status_code=404, detail="Matchup not found")
+        
+        # Find opponent's matchup (same matchup_id_sleeper, different roster_id)
+        opponent_matchup = db.query(SleeperMatchup).filter(
+            SleeperMatchup.league_id == league_id,
+            SleeperMatchup.week == week,
+            SleeperMatchup.matchup_id_sleeper == my_matchup.matchup_id_sleeper,
+            SleeperMatchup.roster_id != my_roster.roster_id
+        ).first()
+        
+        # Get opponent roster info
+        opponent_roster = None
+        if opponent_matchup:
+            opponent_roster = db.query(SleeperRoster).filter(
+                SleeperRoster.league_id == league_id,
+                SleeperRoster.roster_id == opponent_matchup.roster_id
+            ).first()
+        
+        # Get projections using the same service as dashboard
+        from app.services.projection_aggregation_service import ProjectionAggregationService
+        aggregation_service = ProjectionAggregationService(db)
+        consensus_projections = await aggregation_service.create_consensus_projections(
+            week=week,
+            season="2025"  # TODO: Make this configurable
+        )
+        
+        # Get my player details with projections
+        my_players = []
+        if my_matchup.starters:
+            for sleeper_id in my_matchup.starters:
+                sleeper_player = db.query(SleeperPlayer).filter(
+                    SleeperPlayer.sleeper_player_id == sleeper_id
+                ).first()
+                
+                # Get consensus projection
+                consensus = consensus_projections.get(sleeper_id)
+                fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
+                
+                my_players.append({
+                    'sleeper_id': sleeper_id,
+                    'player_name': sleeper_player.full_name if sleeper_player else None,
+                    'position': sleeper_player.position if sleeper_player else None,
+                    'team': sleeper_player.team if sleeper_player else None,
+                    'projections': {
+                        'fantasy_points': round(fantasy_points, 2)
+                    } if fantasy_points > 0 else None
+                })
+        
+        # Get opponent player details with projections
+        opponent_players = []
+        if opponent_matchup and opponent_matchup.starters:
+            for sleeper_id in opponent_matchup.starters:
+                sleeper_player = db.query(SleeperPlayer).filter(
+                    SleeperPlayer.sleeper_player_id == sleeper_id
+                ).first()
+                
+                # Get consensus projection
+                consensus = consensus_projections.get(sleeper_id)
+                fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
+                
+                opponent_players.append({
+                    'sleeper_id': sleeper_id,
+                    'player_name': sleeper_player.full_name if sleeper_player else None,
+                    'position': sleeper_player.position if sleeper_player else None,
+                    'team': sleeper_player.team if sleeper_player else None,
+                    'projections': {
+                        'fantasy_points': round(fantasy_points, 2)
+                    } if fantasy_points > 0 else None
+                })
+        
+        return {
+            'week': week,
+            'my_roster': {
+                'roster_id': my_roster.roster_id,
+                'owner_id': my_roster.owner_id,
+                'points': float(my_matchup.points) if my_matchup.points else 0,
+                'record': f"{my_roster.wins}-{my_roster.losses}",
+                'starters': my_matchup.starters,
+                'starters_points': my_matchup.starters_points,
+                'players': my_players,
+                'projected_total': sum(p['projections']['fantasy_points'] for p in my_players if p['projections'])
+            },
+            'opponent_roster': {
+                'roster_id': opponent_roster.roster_id if opponent_roster else None,
+                'owner_id': opponent_roster.owner_id if opponent_roster else None,
+                'points': float(opponent_matchup.points) if opponent_matchup and opponent_matchup.points else 0,
+                'record': f"{opponent_roster.wins}-{opponent_roster.losses}" if opponent_roster else "0-0",
+                'starters': opponent_matchup.starters if opponent_matchup else [],
+                'starters_points': opponent_matchup.starters_points if opponent_matchup else [],
+                'players': opponent_players,
+                'projected_total': sum(p['projections']['fantasy_points'] for p in opponent_players if p['projections'])
+            } if opponent_matchup and opponent_roster else None,
+            'matchup_id': my_matchup.matchup_id_sleeper,
+            'is_complete': my_matchup.points is not None and (opponent_matchup is None or opponent_matchup.points is not None)
+        }
+        
     finally:
         await service.close()

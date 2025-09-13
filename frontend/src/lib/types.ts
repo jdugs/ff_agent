@@ -185,6 +185,42 @@ export interface Player {
     sleeper_players: number;
   }
   
+  export interface MatchupPlayer {
+    sleeper_id: string;
+    player_name: string | null;
+    position: string | null;
+    team: string | null;
+    projections: {
+      fantasy_points: number;
+    } | null;
+  }
+
+  export interface Matchup {
+    week: number;
+    my_roster: {
+      roster_id: number;
+      owner_id: string;
+      points: number;
+      record: string;
+      starters: string[];
+      starters_points: number[];
+      players: MatchupPlayer[];
+      projected_total: number;
+    };
+    opponent_roster: {
+      roster_id: number;
+      owner_id: string;
+      points: number;
+      record: string;
+      starters: string[];
+      starters_points: number[];
+      players: MatchupPlayer[];
+      projected_total: number;
+    } | null;
+    matchup_id: number;
+    is_complete: boolean;
+  }
+
   // UI State types
   export interface UIState {
     selectedPlayer: Player | null;

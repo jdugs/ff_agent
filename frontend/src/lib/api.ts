@@ -86,6 +86,12 @@ export class ApiClient {
     return response.data;
   }
 
+  // Matchups
+  static async getMyMatchup(leagueId: string, week: number, userId: string) {
+    const response = await api.get(`/api/v1/sleeper/league/${leagueId}/my-matchup/${week}?user_id=${userId}`);
+    return response.data;
+  }
+
   // Health Check
   static async healthCheck() {
     const response = await api.get('/health');

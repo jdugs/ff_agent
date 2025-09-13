@@ -267,15 +267,23 @@ class SleeperService:
         raw_status = player_data.get('status', 'Active')
         mapped_status = status_mapping.get(raw_status, 'Active')  # Default to Active if unknown
         
+        # Handle missing full_name - create from first_name + last_name if available
+        full_name = player_data.get('full_name')
+        first_name = player_data.get('first_name')
+        last_name = player_data.get('last_name')
+        
+        if not full_name and first_name and last_name:
+            full_name = f"{first_name} {last_name}"
+        
         existing = self.db.query(SleeperPlayer).filter(
             SleeperPlayer.sleeper_player_id == sleeper_id
         ).first()
         
         if existing:
             # Update existing
-            existing.full_name = player_data.get('full_name')
-            existing.first_name = player_data.get('first_name')
-            existing.last_name = player_data.get('last_name')
+            existing.full_name = full_name
+            existing.first_name = first_name
+            existing.last_name = last_name
             existing.position = player_data.get('position')
             existing.team = player_data.get('team')
             existing.age = player_data.get('age')
@@ -296,9 +304,9 @@ class SleeperService:
             # Create new
             sleeper_player = SleeperPlayer(
                 sleeper_player_id=sleeper_id,
-                full_name=player_data.get('full_name'),
-                first_name=player_data.get('first_name'),
-                last_name=player_data.get('last_name'),
+                full_name=full_name,
+                first_name=first_name,
+                last_name=last_name,
                 position=player_data.get('position'),
                 team=player_data.get('team'),
                 age=player_data.get('age'),

@@ -157,11 +157,11 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
                     (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.8 ? 'bg-success-500' :
                     (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.6 ? 'bg-warning-500' : 'bg-danger-500'
                   )}
-                  style={{ width: `${((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100}%` }}
+                  style={{ width: `${Math.min(100, ((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100)}%` }}
                 />
               </div>
               <span className="text-xs text-white">
-                {Math.round(((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100)}%
+                {Math.min(100, Math.round(((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100))}%
               </span>
             </div>
           </div>
