@@ -19,7 +19,7 @@ export const PlayerRankingsPanel: React.FC<PlayerRankingsPanelProps> = ({ player
           <div className="mt-4">
             <p className="text-sm text-dark-300">But we have consensus projections!</p>
             <div className="mt-2 text-lg font-bold text-success-400">
-              {player.projections.fantasy_points.toFixed(1)} projected points
+              {player.projections.fantasy_points.toFixed(2)} projected points
             </div>
             <p className="text-xs text-dark-400">
               From {player.projections.meta.provider_count} provider(s)
@@ -92,7 +92,7 @@ export const PlayerRankingsPanel: React.FC<PlayerRankingsPanelProps> = ({ player
                 {ranking.projection && (
                   <div className="text-center">
                     <div className="text-lg font-bold text-success-400">
-                      {ranking.projection.toFixed(1)}
+                      {ranking.projection.toFixed(2)}
                     </div>
                     <div className="text-xs text-dark-400">Projected</div>
                   </div>

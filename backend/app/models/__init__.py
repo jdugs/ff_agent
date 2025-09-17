@@ -5,6 +5,7 @@ from .rankings import Ranking, PlayerProjection
 from .news import NewsEvent
 from .sleeper import SleeperLeague, SleeperRoster, SleeperPlayer, SleeperMatchup
 from .api_logs import APICallLog, PlayerIDMapping
+from .nfl_schedule import NFLSchedule
 
 __all__ = [
     "Base",
@@ -13,5 +14,6 @@ __all__ = [
     "Ranking", "PlayerProjection",
     "NewsEvent",
     "SleeperLeague", "SleeperRoster", "SleeperPlayer", "SleeperMatchup",
-    "APICallLog", "PlayerIDMapping"
+    "APICallLog", "PlayerIDMapping",
+    "NFLSchedule"
 ]

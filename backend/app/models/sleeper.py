@@ -125,12 +125,46 @@ class SleeperPlayerStats(Base, TimestampMixin):
     rec_tds = Column(Integer)
     rec = Column(Integer)
     rec_tgt = Column(Integer)
+
+    # 2-point conversions
+    pass_2pt = Column(Integer)
+    rush_2pt = Column(Integer)
+    rec_2pt = Column(Integer)
+    def_2pt = Column(Integer)
+
+    # Fumbles and other penalties
+    fum = Column(Integer)              # Fumbles (not lost)
+    fum_lost = Column(Integer)         # Fumbles lost
+    pass_sack = Column(DECIMAL(4, 1))  # Sacks taken by QB
+    ff = Column(DECIMAL(4, 1))         # Forced fumbles
+    fum_rec_td = Column(Integer)       # Fumble recovery touchdown
+
+    # Position bonuses
+    bonus_rec_te = Column(DECIMAL(4, 1))  # TE reception bonus
     
     # Kicking stats
     fgm = Column(Integer)
     fga = Column(Integer)
     xpm = Column(Integer)
     xpa = Column(Integer)
+
+    # Distance-based field goal stats
+    fgm_0_19 = Column(Integer)
+    fgm_20_29 = Column(Integer)
+    fgm_30_39 = Column(Integer)
+    fgm_40_49 = Column(Integer)
+    fgm_50_59 = Column(Integer)
+    fgm_60p = Column(Integer)
+
+    # Distance-based field goal misses
+    fgmiss_0_19 = Column(Integer)
+    fgmiss_20_29 = Column(Integer)
+    fgmiss_30_39 = Column(Integer)
+    fgmiss_40_49 = Column(Integer)
+
+    # Kicking yards and misses
+    fgm_yds = Column(Integer)    # Total field goal yards
+    xpmiss = Column(Integer)     # Missed extra points
     
     # Defensive stats
     def_sack = Column(DECIMAL(4, 1))  # Sacks (can be fractional)
@@ -144,6 +178,44 @@ class SleeperPlayerStats(Base, TimestampMixin):
     def_tackle_assist = Column(Integer) # Assisted tackles
     def_qb_hit = Column(Integer)      # QB hits
     def_tfl = Column(Integer)         # Tackles for loss
+
+    # Defense/Special Teams - Team Defense Stats
+    pts_allow_0 = Column(Integer)      # Points allowed: 0
+    pts_allow_1_6 = Column(Integer)    # Points allowed: 1-6
+    pts_allow_7_13 = Column(Integer)   # Points allowed: 7-13
+    pts_allow_14_20 = Column(Integer)  # Points allowed: 14-20
+    pts_allow_21_27 = Column(Integer)  # Points allowed: 21-27
+    pts_allow_28_34 = Column(Integer)  # Points allowed: 28-34
+    pts_allow_35p = Column(Integer)    # Points allowed: 35+
+
+    # Yards allowed tiers
+    yds_allow_0_100 = Column(Integer)    # Yards allowed: 0-100
+    yds_allow_100_199 = Column(Integer)  # Yards allowed: 100-199
+    yds_allow_200_299 = Column(Integer)  # Yards allowed: 200-299
+    yds_allow_300_349 = Column(Integer)  # Yards allowed: 300-349
+    yds_allow_350_399 = Column(Integer)  # Yards allowed: 350-399
+    yds_allow_400_449 = Column(Integer)  # Yards allowed: 400-449
+    yds_allow_450_499 = Column(Integer)  # Yards allowed: 450-499
+    yds_allow_500_549 = Column(Integer)  # Yards allowed: 500-549
+    yds_allow_550p = Column(Integer)     # Yards allowed: 550+
+
+    # Additional defensive stats
+    def_4_and_stop = Column(Integer)   # 4th down stops
+    def_st_td = Column(Integer)        # Special teams TD
+    def_st_fum_rec = Column(Integer)   # Special teams fumble recovery
+    def_st_ff = Column(DECIMAL(4, 1))  # Special teams forced fumble
+    idp_tkl = Column(Integer)          # Individual defensive player tackles
+
+    # Special teams return stats
+    kr_yd = Column(Integer)            # Kick return yards
+    pr_yd = Column(Integer)            # Punt return yards
+    st_td = Column(Integer)            # Special teams touchdown
+    st_fum_rec = Column(Integer)       # Special teams fumble recovery
+    st_ff = Column(DECIMAL(4, 1))     # Special teams forced fumble
+
+    # Additional team defense stats
+    pts_allow = Column(DECIMAL(5, 2))  # Total points allowed (for -0.25 per point)
+    yds_allow = Column(Integer)        # Total yards allowed (for -0.02 per yard)
     
     # Raw stats from Sleeper
     raw_stats = Column(JSON)

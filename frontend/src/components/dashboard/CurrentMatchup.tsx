@@ -77,8 +77,11 @@ export const CurrentMatchup: React.FC = () => {
   const opponentPoints = matchup.opponent_roster?.points || 0;
   const pointDiff = myPoints - opponentPoints;
 
+  // Check if matchup is actually complete - need both teams to have final scores
+  const isMatchupComplete = matchup.is_complete && myPoints > 0 && opponentPoints > 0;
+  
   const getMatchupStatus = () => {
-    if (!matchup.is_complete) return 'in_progress';
+    if (!isMatchupComplete) return 'in_progress';
     if (pointDiff > 0) return 'winning';
     if (pointDiff < 0) return 'losing';
     return 'tied';
@@ -127,102 +130,72 @@ export const CurrentMatchup: React.FC = () => {
           }
           size="sm"
         >
-          {matchup.is_complete ? 'Complete' : 'In Progress'}
+          {isMatchupComplete ? 'Complete' : 'In Progress'}
         </Badge>
       </div>
 
       <div className="space-y-4">
         {/* Score comparison */}
-        <div className="flex items-center justify-between p-4 bg-dark-700 rounded-lg">
+        <div className="flex items-center justify-between p-6 bg-dark-700 rounded-lg">
           <div className="text-center">
-            <div className="text-2xl font-bold text-white">
+            <div className="text-3xl font-bold text-white">
               {formatPoints(myPoints)}
             </div>
-            <div className="text-xs text-success-400">
-              Proj: {formatPoints(matchup.my_roster.projected_total)}
-            </div>
-            <div className="text-sm text-dark-400">You</div>
+            <div className="text-sm text-dark-400 mt-1">You</div>
             <div className="text-xs text-dark-500">{matchup.my_roster.record}</div>
+            {matchup.opponent_roster && (
+              <div className="text-xs text-success-400 mt-1">
+                Proj: {formatPoints(matchup.my_roster.projected_total)}
+              </div>
+            )}
           </div>
           
           <div className="text-center">
-            <div className="text-sm text-dark-400 mb-1">vs</div>
-            <div className={`text-lg font-medium ${getStatusColor()}`}>
+            <div className="text-sm text-dark-400 mb-2">vs</div>
+            <div className={`text-xl font-medium ${getStatusColor()}`}>
               {pointDiff > 0 ? `+${formatPoints(Math.abs(pointDiff))}` : 
                pointDiff < 0 ? `-${formatPoints(Math.abs(pointDiff))}` : 
                'Tied'}
             </div>
             {matchup.opponent_roster && (
-              <div className="text-xs text-warning-400 mt-1">
+              <div className="text-xs text-warning-400 mt-2">
                 Proj Diff: {formatPoints(matchup.my_roster.projected_total - matchup.opponent_roster.projected_total)}
               </div>
             )}
           </div>
           
           <div className="text-center">
-            <div className="text-2xl font-bold text-white">
-              {formatPoints(opponentPoints)}
+            <div className="text-3xl font-bold text-white">
+              {matchup.opponent_roster ? formatPoints(opponentPoints) : '-'}
             </div>
-            {matchup.opponent_roster && (
-              <div className="text-xs text-success-400">
-                Proj: {formatPoints(matchup.opponent_roster.projected_total)}
-              </div>
-            )}
-            <div className="text-sm text-dark-400">
+            <div className="text-sm text-dark-400 mt-1">
               {matchup.opponent_roster ? 'Opponent' : 'Bye Week'}
             </div>
             <div className="text-xs text-dark-500">
               {matchup.opponent_roster?.record || 'N/A'}
             </div>
-          </div>
-        </div>
-
-        {/* Opponent Roster */}
-        {matchup.opponent_roster && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-medium text-white">Opponent's Lineup</h4>
-              <div className="text-sm text-dark-400">
-                Projected: {formatPoints(matchup.opponent_roster.projected_total)}
-              </div>
-            </div>
-            <div className="max-h-48 overflow-y-auto space-y-1">
-              {matchup.opponent_roster.players.map((player) => (
-                <div key={player.sleeper_id} className="flex items-center justify-between text-xs p-2 bg-dark-800 rounded">
-                  <div className="flex items-center space-x-2 min-w-0 flex-1">
-                    <span className="text-primary-400 font-mono text-[10px] w-6 text-center">
-                      {player.position}
-                    </span>
-                    <span className="text-white truncate">
-                      {player.player_name || 'Unknown'}
-                    </span>
-                    <span className="text-dark-500 text-[10px]">
-                      {player.team}
-                    </span>
-                  </div>
-                  <div className="text-success-400 font-medium ml-2">
-                    {player.projections ? formatPoints(player.projections.fantasy_points) : '0.0'}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Additional matchup info */}
-        {matchup.opponent_roster && (
-          <div className="text-center text-sm">
-            <div className="text-dark-400">
-              Matchup ID: {matchup.matchup_id}
-            </div>
-            {!matchup.is_complete && (
-              <div className="text-warning-400 mt-1">
-                <span className="inline-block w-2 h-2 bg-warning-400 rounded-full animate-pulse mr-1"></span>
-                Game in progress
+            {matchup.opponent_roster && (
+              <div className="text-xs text-success-400 mt-1">
+                Proj: {formatPoints(matchup.opponent_roster.projected_total)}
               </div>
             )}
           </div>
-        )}
+        </div>
+
+        {/* Game status */}
+        <div className="text-center text-sm">
+          {matchup.opponent_roster && !isMatchupComplete && (
+            <div className="text-warning-400">
+              <span className="inline-block w-2 h-2 bg-warning-400 rounded-full animate-pulse mr-1"></span>
+              Games in progress
+            </div>
+          )}
+          {isMatchupComplete && (
+            <div className="text-success-400">
+              Week {matchup.week} complete
+            </div>
+          )}
+        </div>
 
         {/* Bye week message */}
         {!matchup.opponent_roster && (

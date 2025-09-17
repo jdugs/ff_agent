@@ -76,14 +76,14 @@ export const Header: React.FC = () => {
               <div className="flex items-center space-x-2">
                 <span className="text-dark-400">Projected:</span>
                 <span className="text-success-400 font-medium">
-                  {currentTeam.data.roster_summary.projected_points_total.toFixed(1)}
+                  {currentTeam.data.roster_summary.projected_points_total.toFixed(2)}
                 </span>
               </div>
               
               <div className="flex items-center space-x-2">
                 <span className="text-dark-400">Points For:</span>
                 <span className="text-white font-medium">
-                  {currentTeam.data.roster_summary.team_record.points_for.toFixed(1)}
+                  {currentTeam.data.roster_summary.team_record.points_for.toFixed(2)}
                 </span>
               </div>
             </div>

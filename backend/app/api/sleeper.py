@@ -4,8 +4,12 @@ from typing import List, Optional
 from app.config import settings
 from app.database import get_db
 from app.services.sleeper_service import SleeperService
+from app.services.nfl_schedule_service import NFLScheduleService
 from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer
 from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -21,6 +25,8 @@ class LeagueResponse(BaseModel):
     season: str
     status: str
     total_rosters: int
+    scoring_settings: Optional[dict] = None
+    roster_positions: Optional[list] = None
     
     class Config:
         from_attributes = True
@@ -442,48 +448,103 @@ async def get_my_matchup(
             season="2025"  # TODO: Make this configurable
         )
         
-        # Get my player details with projections
+        # Get my player details with projections and actual stats
         my_players = []
         if my_matchup.starters:
             for sleeper_id in my_matchup.starters:
                 sleeper_player = db.query(SleeperPlayer).filter(
                     SleeperPlayer.sleeper_player_id == sleeper_id
                 ).first()
-                
+
                 # Get consensus projection
                 consensus = consensus_projections.get(sleeper_id)
                 fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
-                
+
+                # Get actual stats for this week
+                from app.models.sleeper import SleeperPlayerStats
+                player_stats = db.query(SleeperPlayerStats).filter(
+                    SleeperPlayerStats.sleeper_player_id == sleeper_id,
+                    SleeperPlayerStats.week == week,
+                    SleeperPlayerStats.season == "2025"
+                ).first()
+
+                # Calculate actual fantasy points using league-specific scoring settings
+                actual_fantasy_points = None
+                if player_stats and player_stats.raw_stats:
+                    try:
+                        actual_fantasy_points = await service.calculate_league_specific_points(
+                            league_id, player_stats.raw_stats
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate league-specific points for {sleeper_id}: {e}")
+                        actual_fantasy_points = 0.0
+
+                # Get game info for this player's team
+                schedule_service = NFLScheduleService(db)
+                opponent, game_time = schedule_service.get_opponent_and_time(sleeper_player.team or '', week)
+
                 my_players.append({
                     'sleeper_id': sleeper_id,
                     'player_name': sleeper_player.full_name if sleeper_player else None,
                     'position': sleeper_player.position if sleeper_player else None,
                     'team': sleeper_player.team if sleeper_player else None,
+                    'opponent': opponent,
+                    'game_time': game_time,
                     'projections': {
                         'fantasy_points': round(fantasy_points, 2)
-                    } if fantasy_points > 0 else None
+                    } if fantasy_points > 0 else None,
+                    'actual_stats': {
+                        'fantasy_points': round(actual_fantasy_points, 2) if actual_fantasy_points else 0
+                    } if player_stats else None
                 })
         
-        # Get opponent player details with projections
+        # Get opponent player details with projections and actual stats
         opponent_players = []
         if opponent_matchup and opponent_matchup.starters:
             for sleeper_id in opponent_matchup.starters:
                 sleeper_player = db.query(SleeperPlayer).filter(
                     SleeperPlayer.sleeper_player_id == sleeper_id
                 ).first()
-                
+
                 # Get consensus projection
                 consensus = consensus_projections.get(sleeper_id)
                 fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
-                
+
+                # Get actual stats for this week
+                player_stats = db.query(SleeperPlayerStats).filter(
+                    SleeperPlayerStats.sleeper_player_id == sleeper_id,
+                    SleeperPlayerStats.week == week,
+                    SleeperPlayerStats.season == "2025"
+                ).first()
+
+                # Calculate actual fantasy points using league-specific scoring settings
+                actual_fantasy_points = None
+                if player_stats and player_stats.raw_stats:
+                    try:
+                        actual_fantasy_points = await service.calculate_league_specific_points(
+                            league_id, player_stats.raw_stats
+                        )
+                    except Exception as e:
+                        logger.warning(f"Failed to calculate league-specific points for {sleeper_id}: {e}")
+                        actual_fantasy_points = 0.0
+
+                # Get game info for this player's team
+                schedule_service = NFLScheduleService(db)
+                opponent, game_time = schedule_service.get_opponent_and_time(sleeper_player.team or '', week)
+
                 opponent_players.append({
                     'sleeper_id': sleeper_id,
                     'player_name': sleeper_player.full_name if sleeper_player else None,
                     'position': sleeper_player.position if sleeper_player else None,
                     'team': sleeper_player.team if sleeper_player else None,
+                    'opponent': opponent,
+                    'game_time': game_time,
                     'projections': {
                         'fantasy_points': round(fantasy_points, 2)
-                    } if fantasy_points > 0 else None
+                    } if fantasy_points > 0 else None,
+                    'actual_stats': {
+                        'fantasy_points': round(actual_fantasy_points, 2) if actual_fantasy_points else 0
+                    } if player_stats else None
                 })
         
         return {
@@ -514,3 +575,23 @@ async def get_my_matchup(
         
     finally:
         await service.close()
+
+@router.post("/sync/schedule/{week}")
+async def sync_nfl_schedule(
+    week: int,
+    season: str = "2025",
+    db: Session = Depends(get_db)
+):
+    """Sync NFL schedule for a specific week from ESPN API"""
+    try:
+        schedule_service = NFLScheduleService(db)
+        success = await schedule_service.sync_week_schedule(week, season)
+        
+        if success:
+            return {"message": f"Successfully synced NFL schedule for Week {week} {season}"}
+        else:
+            raise HTTPException(status_code=500, detail="Failed to sync NFL schedule")
+            
+    except Exception as e:
+        logger.error(f"Failed to sync NFL schedule for week {week}: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

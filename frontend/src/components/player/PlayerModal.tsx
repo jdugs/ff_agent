@@ -15,6 +15,7 @@ import { useState } from 'react';
 const tabs = [
   { id: 'rankings', label: 'Rankings' },
   { id: 'projections', label: 'Projections' },
+  { id: 'stats', label: 'Actual Stats' },
   { id: 'news', label: 'News & Updates' },
   { id: 'trends', label: 'Trends' },
 ];
@@ -78,6 +79,25 @@ export const PlayerModal: React.FC = () => {
                   <span className="text-success-400 font-medium">
                     {formatPoints(selectedPlayer.projections?.fantasy_points || selectedPlayer.latest_projection || 0)} pts
                   </span>
+                </div>
+              )}
+
+              {selectedPlayer.actual_stats && (
+                <div>
+                  <span className="text-dark-400">Actual: </span>
+                  <span className="text-primary-400 font-medium">
+                    {formatPoints(selectedPlayer.actual_stats.fantasy_points.ppr)} pts
+                  </span>
+                  {selectedPlayer.projections && (
+                    <span className={`text-xs ml-1 ${
+                      (selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points) > 0 
+                        ? 'text-success-400' 
+                        : 'text-danger-400'
+                    }`}>
+                      ({(selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points) > 0 ? '+' : ''}
+                      {formatPoints(selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points)})
+                    </span>
+                  )}
                 </div>
               )}
 
@@ -149,6 +169,136 @@ export const PlayerModal: React.FC = () => {
           )}
           {activeTab === 'projections' && (
             <PlayerProjectionsPanel player={selectedPlayer} />
+          )}
+          {activeTab === 'stats' && (
+            <div className="space-y-4">
+              {selectedPlayer.actual_stats ? (
+                <>
+                  {/* Fantasy Points */}
+                  <Card>
+                    <h3 className="text-lg font-semibold text-white mb-3">Fantasy Points</h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary-400">
+                          {formatPoints(selectedPlayer.actual_stats.fantasy_points.ppr)}
+                        </div>
+                        <div className="text-xs text-dark-400">PPR</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary-400">
+                          {formatPoints(selectedPlayer.actual_stats.fantasy_points.half_ppr)}
+                        </div>
+                        <div className="text-xs text-dark-400">Half PPR</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="text-2xl font-bold text-primary-400">
+                          {formatPoints(selectedPlayer.actual_stats.fantasy_points.standard)}
+                        </div>
+                        <div className="text-xs text-dark-400">Standard</div>
+                      </div>
+                    </div>
+                  </Card>
+
+                  {/* Detailed Stats */}
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {/* Passing Stats */}
+                    {(selectedPlayer.actual_stats.passing.yards > 0 || selectedPlayer.actual_stats.passing.touchdowns > 0) && (
+                      <Card>
+                        <h4 className="font-semibold text-white mb-2">Passing</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Yards:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.passing.yards}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">TDs:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.passing.touchdowns}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">INTs:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.passing.interceptions}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Comp/Att:</span>
+                            <span className="text-white">
+                              {selectedPlayer.actual_stats.passing.completions}/{selectedPlayer.actual_stats.passing.attempts}
+                            </span>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Rushing Stats */}
+                    {(selectedPlayer.actual_stats.rushing.yards > 0 || selectedPlayer.actual_stats.rushing.touchdowns > 0) && (
+                      <Card>
+                        <h4 className="font-semibold text-white mb-2">Rushing</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Yards:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.rushing.yards}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">TDs:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.rushing.touchdowns}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Attempts:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.rushing.attempts}</span>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+
+                    {/* Receiving Stats */}
+                    {(selectedPlayer.actual_stats.receiving.yards > 0 || selectedPlayer.actual_stats.receiving.touchdowns > 0 || selectedPlayer.actual_stats.receiving.receptions > 0) && (
+                      <Card>
+                        <h4 className="font-semibold text-white mb-2">Receiving</h4>
+                        <div className="space-y-2 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Yards:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.receiving.yards}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">TDs:</span>
+                            <span className="text-white">{selectedPlayer.actual_stats.receiving.touchdowns}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-dark-400">Rec/Tgt:</span>
+                            <span className="text-white">
+                              {selectedPlayer.actual_stats.receiving.receptions}/{selectedPlayer.actual_stats.receiving.targets}
+                            </span>
+                          </div>
+                        </div>
+                      </Card>
+                    )}
+                  </div>
+
+                  {/* Performance vs Projection */}
+                  {selectedPlayer.projections && (
+                    <Card className="bg-info-500/10 border-info-500/30">
+                      <h4 className="font-semibold text-info-400 mb-2">Performance vs Projection</h4>
+                      <div className="flex items-center justify-between">
+                        <span className="text-dark-400">Actual vs Projected:</span>
+                        <span className={`font-medium ${
+                          (selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points) > 0 
+                            ? 'text-success-400' 
+                            : 'text-danger-400'
+                        }`}>
+                          {formatPoints(selectedPlayer.actual_stats.fantasy_points.ppr)} vs {formatPoints(selectedPlayer.projections.fantasy_points)}
+                          ({(selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points) > 0 ? '+' : ''}
+                          {formatPoints(selectedPlayer.actual_stats.fantasy_points.ppr - selectedPlayer.projections.fantasy_points)})
+                        </span>
+                      </div>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-12 text-dark-400">
+                  <p>No actual stats available yet</p>
+                  <p className="text-sm mt-1">Stats will appear after the player's game</p>
+                </div>
+              )}
+            </div>
           )}
           {activeTab === 'news' && (
             <PlayerNewsPanel player={selectedPlayer} />

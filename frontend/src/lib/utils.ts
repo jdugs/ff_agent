@@ -6,8 +6,8 @@ return twMerge(clsx(inputs));
 }
   
 export function formatPoints(points: number | undefined): string {
-  if (!points) return '0.0';
-  return points.toFixed(1);
+  if (!points) return '0.00';
+  return points.toFixed(2);
 }
 
 export function formatRecord(record: string): string {

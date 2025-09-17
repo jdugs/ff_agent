@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { TeamDashboard, League, DashboardStats, Player } from './types';
+import type { TeamDashboard, League, DashboardStats, Player, FantasyWeekState } from './types';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
 
@@ -60,15 +60,33 @@ export class ApiClient {
       league_id: leagueId,
       owner_id: userId,
       include_stats: 'true',
-      include_news: 'false', 
+      include_news: 'false',
       include_photos: 'false'
     });
-    
+
     if (week) {
       params.append('week', week.toString());
     }
-    
+
     const response = await api.get(`/api/v1/dashboard/roster?${params}`);
+    return response.data;
+  }
+
+  // Unified Team Roster API - works for any owner
+  static async getTeamRoster(leagueId: string, ownerId: string, week?: number): Promise<TeamDashboard> {
+    const params = new URLSearchParams({
+      league_id: leagueId,
+      owner_id: ownerId,
+      include_stats: 'true',
+      include_news: 'false',
+      include_photos: 'false'
+    });
+
+    if (week) {
+      params.append('week', week.toString());
+    }
+
+    const response = await api.get(`/api/v1/dashboard/team-roster?${params}`);
     return response.data;
   }
 
@@ -89,6 +107,12 @@ export class ApiClient {
   // Matchups
   static async getMyMatchup(leagueId: string, week: number, userId: string) {
     const response = await api.get(`/api/v1/sleeper/league/${leagueId}/my-matchup/${week}?user_id=${userId}`);
+    return response.data;
+  }
+
+  // Fantasy Week State
+  static async getFantasyWeekState(): Promise<FantasyWeekState> {
+    const response = await api.get('/api/v1/dashboard/week-state');
     return response.data;
   }
 

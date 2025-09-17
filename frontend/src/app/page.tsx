@@ -3,12 +3,12 @@
 import React, { useEffect } from 'react';
 import { useTeamStore } from '@/store/teamStore';
 import { useUIStore } from '@/store/uiStore';
-import { TeamOverview } from '@/components/dashboard/TeamOverview';
-import { StartingLineup } from '@/components/dashboard/StartingLineup';
+import { TeamBanner } from '@/components/dashboard/TeamBanner';
+import { MatchupView } from '@/components/dashboard/MatchupView';
 import { QuickActions } from '@/components/dashboard/QuickActions';
 import { RecentNews } from '@/components/dashboard/RecentNews';
 import { WaiverTargets } from '@/components/dashboard/WaiverTargets';
-import { CurrentMatchup } from '@/components/dashboard/CurrentMatchup';
+import { WeekStateBanner } from '@/components/dashboard/WeekStateBanner';
 import { Card } from '@/components/ui/Card';
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner';
 
@@ -74,22 +74,25 @@ export default function DashboardPage() {
       case 'dashboard':
         return (
           <div className="p-6 space-y-6">
-            {/* Team Overview and Current Matchup Row */}
+            {/* Week State Banner - Full Width */}
+            <WeekStateBanner />
+            
+            {/* Team Banner - Full Width */}
+            <TeamBanner team={currentTeam} />
+
+            {/* Main Content Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Matchup View - Takes up 2 columns */}
               <div className="lg:col-span-2">
-                <TeamOverview team={currentTeam} />
+                <MatchupView />
               </div>
-              <CurrentMatchup />
-            </div>
 
-            {/* Starting Lineup */}
-            <StartingLineup players={currentTeam.data.lineup.starters} />
-
-            {/* Bottom Row - Actions, News, Waiver */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <QuickActions team={currentTeam} />
-              <RecentNews players={currentTeam.data.lineup.starters} />
-              <WaiverTargets />
+              {/* Secondary Info */}
+              <div className="space-y-6">
+                <QuickActions team={currentTeam} />
+                <RecentNews players={currentTeam.data.lineup.starters} />
+                <WaiverTargets />
+              </div>
             </div>
           </div>
         );
@@ -112,7 +115,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-success-400 font-medium">
-                            {player.projections?.fantasy_points.toFixed(1) || '0.0'} pts
+                            {player.projections?.fantasy_points.toFixed(2) || '0.00'} pts
                           </div>
                           <div className="text-xs text-dark-400">
                             {player.projections?.meta.provider_count || 0} provider(s)
@@ -135,7 +138,7 @@ export default function DashboardPage() {
                         </div>
                         <div className="text-right">
                           <div className="text-warning-400 font-medium">
-                            {player.projections?.fantasy_points.toFixed(1) || '0.0'} pts
+                            {player.projections?.fantasy_points.toFixed(2) || '0.00'} pts
                           </div>
                           <div className="text-xs text-dark-400">
                             {player.projections?.meta.provider_count || 0} provider(s)

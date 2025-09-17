@@ -5,6 +5,7 @@ from app.integrations.sleeper_api import SleeperAPIClient
 from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer, SleeperMatchup, SleeperPlayerStats, SleeperPlayerProjections
 from app.models.players import Player
 from app.services.player_mapping_service import PlayerMappingService
+from app.utils.scoring import calculate_fantasy_points
 import logging
 
 logger = logging.getLogger(__name__)
@@ -346,14 +347,7 @@ class SleeperService:
             count = 0
             
             # Sync individual player stats and team defenses
-            # defense_count = 0
             for sleeper_id, stats in stats_data.items():
-                # if sleeper_id.startswith('TEAM_'):
-                #     # This is a team defense, strip the TEAM_ prefix
-                #     team_id = sleeper_id.replace('TEAM_', '')
-                #     await self._upsert_player_stats(team_id, week, season, stats)
-                #     defense_count += 1
-                # el
                 if self._should_sync_player_stats(stats):
                     # Regular player stats
                     await self._upsert_player_stats(sleeper_id, week, season, stats)
@@ -407,10 +401,11 @@ class SleeperService:
                 return
             # If player exists but no stats, continue with the provided stats from the bulk response
 
-        # Calculate fantasy points using standard scoring formats for storage
-        ppr_points = self._calculate_fantasy_points(stats, scoring_type='ppr')
-        standard_points = self._calculate_fantasy_points(stats, scoring_type='standard')
-        half_ppr_points = self._calculate_fantasy_points(stats, scoring_type='half_ppr')
+        # Store raw stats only - fantasy points will be calculated on-demand with league context
+        # This avoids the need for fallback scoring and ensures accuracy
+        ppr_points = None  # Will calculate on-demand
+        standard_points = None  # Will calculate on-demand
+        half_ppr_points = None  # Will calculate on-demand
         
         if existing:
             # Update existing - using correct Sleeper API field names
@@ -425,6 +420,39 @@ class SleeperService:
             existing.rec_yds = stats.get('rec_yd')    # Note: 'rec_yd' not 'rec_yds'
             existing.rec_tds = stats.get('rec_td')
             existing.rec = stats.get('rec')
+            # Kicking stats - Basic
+            existing.fgm = stats.get('fgm')
+            existing.fga = stats.get('fga')
+            existing.xpm = stats.get('xpm')
+            existing.xpa = stats.get('xpa')
+
+            # Distance-based kicking
+            existing.fgm_0_19 = stats.get('fgm_0_19')
+            existing.fgm_20_29 = stats.get('fgm_20_29')
+            existing.fgm_30_39 = stats.get('fgm_30_39')
+            existing.fgm_40_49 = stats.get('fgm_40_49')
+            existing.fgm_50_59 = stats.get('fgm_50_59')
+            existing.fgm_60p = stats.get('fgm_60p')
+            existing.fgmiss_0_19 = stats.get('fgmiss_0_19')
+            existing.fgmiss_20_29 = stats.get('fgmiss_20_29')
+            existing.fgmiss_30_39 = stats.get('fgmiss_30_39')
+            existing.fgmiss_40_49 = stats.get('fgmiss_40_49')
+            existing.fgm_yds = stats.get('fgm_yds')
+            existing.xpmiss = stats.get('xpmiss')
+
+            # 2-point conversions
+            existing.pass_2pt = stats.get('pass_2pt')
+            existing.rush_2pt = stats.get('rush_2pt')
+            existing.rec_2pt = stats.get('rec_2pt')
+            existing.def_2pt = stats.get('def_2pt')
+
+            # Fumbles and penalties
+            existing.fum = stats.get('fum')
+            existing.fum_lost = stats.get('fum_lost')
+            existing.pass_sack = stats.get('pass_sack')
+            existing.ff = stats.get('ff')
+            existing.fum_rec_td = stats.get('fum_rec_td')
+            existing.bonus_rec_te = stats.get('bonus_rec_te')
             # Defensive stats - using actual Sleeper field names
             existing.def_sack = stats.get('sack')
             existing.def_int = stats.get('int')  # 'int' not 'def_int'
@@ -437,6 +465,43 @@ class SleeperService:
             existing.def_tackle_assist = stats.get('tkl_ast')  # 'tkl_ast' not 'def_tackle_assist'
             existing.def_qb_hit = stats.get('qb_hit')
             existing.def_tfl = stats.get('tkl_loss')  # 'tkl_loss' might be tackles for loss
+
+            # Defense - Points allowed tiers
+            existing.pts_allow_0 = stats.get('pts_allow_0')
+            existing.pts_allow_1_6 = stats.get('pts_allow_1_6')
+            existing.pts_allow_7_13 = stats.get('pts_allow_7_13')
+            existing.pts_allow_14_20 = stats.get('pts_allow_14_20')
+            existing.pts_allow_21_27 = stats.get('pts_allow_21_27')
+            existing.pts_allow_28_34 = stats.get('pts_allow_28_34')
+            existing.pts_allow_35p = stats.get('pts_allow_35p')
+            existing.pts_allow = stats.get('pts_allow')
+
+            # Defense - Yards allowed tiers
+            existing.yds_allow_0_100 = stats.get('yds_allow_0_100')
+            existing.yds_allow_100_199 = stats.get('yds_allow_100_199')
+            existing.yds_allow_200_299 = stats.get('yds_allow_200_299')
+            existing.yds_allow_300_349 = stats.get('yds_allow_300_349')
+            existing.yds_allow_350_399 = stats.get('yds_allow_350_399')
+            existing.yds_allow_400_449 = stats.get('yds_allow_400_449')
+            existing.yds_allow_450_499 = stats.get('yds_allow_450_499')
+            existing.yds_allow_500_549 = stats.get('yds_allow_500_549')
+            existing.yds_allow_550p = stats.get('yds_allow_550p')
+            existing.yds_allow = stats.get('yds_allow')
+
+            # Additional defensive stats
+            existing.def_4_and_stop = stats.get('def_4_and_stop')
+            existing.def_st_td = stats.get('def_st_td')
+            existing.def_st_fum_rec = stats.get('def_st_fum_rec')
+            existing.def_st_ff = stats.get('def_st_ff')
+            existing.idp_tkl = stats.get('idp_tkl')
+
+            # Special teams return stats
+            existing.kr_yd = stats.get('kr_yd')
+            existing.pr_yd = stats.get('pr_yd')
+            existing.st_td = stats.get('st_td')
+            existing.st_fum_rec = stats.get('st_fum_rec')
+            existing.st_ff = stats.get('st_ff')
+
             existing.raw_stats = stats
         else:
             # Create new - using correct Sleeper API field names
@@ -455,6 +520,39 @@ class SleeperService:
                 rec_yds=stats.get('rec_yd'),     # Note: 'rec_yd' not 'rec_yds'
                 rec_tds=stats.get('rec_td'),
                 rec=stats.get('rec'),
+                # Kicking stats - Basic
+                fgm=stats.get('fgm'),
+                fga=stats.get('fga'),
+                xpm=stats.get('xpm'),
+                xpa=stats.get('xpa'),
+
+                # Distance-based kicking
+                fgm_0_19=stats.get('fgm_0_19'),
+                fgm_20_29=stats.get('fgm_20_29'),
+                fgm_30_39=stats.get('fgm_30_39'),
+                fgm_40_49=stats.get('fgm_40_49'),
+                fgm_50_59=stats.get('fgm_50_59'),
+                fgm_60p=stats.get('fgm_60p'),
+                fgmiss_0_19=stats.get('fgmiss_0_19'),
+                fgmiss_20_29=stats.get('fgmiss_20_29'),
+                fgmiss_30_39=stats.get('fgmiss_30_39'),
+                fgmiss_40_49=stats.get('fgmiss_40_49'),
+                fgm_yds=stats.get('fgm_yds'),
+                xpmiss=stats.get('xpmiss'),
+
+                # 2-point conversions
+                pass_2pt=stats.get('pass_2pt'),
+                rush_2pt=stats.get('rush_2pt'),
+                rec_2pt=stats.get('rec_2pt'),
+                def_2pt=stats.get('def_2pt'),
+
+                # Fumbles and penalties
+                fum=stats.get('fum'),
+                fum_lost=stats.get('fum_lost'),
+                pass_sack=stats.get('pass_sack'),
+                ff=stats.get('ff'),
+                fum_rec_td=stats.get('fum_rec_td'),
+                bonus_rec_te=stats.get('bonus_rec_te'),
                 # Defensive stats - using actual Sleeper field names
                 def_sack=stats.get('sack'),
                 def_int=stats.get('int'),  # 'int' not 'def_int'
@@ -467,85 +565,89 @@ class SleeperService:
                 def_tackle_assist=stats.get('tkl_ast'),  # 'tkl_ast' not 'def_tackle_assist'
                 def_qb_hit=stats.get('qb_hit'),
                 def_tfl=stats.get('tkl_loss'),  # 'tkl_loss' might be tackles for loss
+
+                # Defense - Points allowed tiers
+                pts_allow_0=stats.get('pts_allow_0'),
+                pts_allow_1_6=stats.get('pts_allow_1_6'),
+                pts_allow_7_13=stats.get('pts_allow_7_13'),
+                pts_allow_14_20=stats.get('pts_allow_14_20'),
+                pts_allow_21_27=stats.get('pts_allow_21_27'),
+                pts_allow_28_34=stats.get('pts_allow_28_34'),
+                pts_allow_35p=stats.get('pts_allow_35p'),
+                pts_allow=stats.get('pts_allow'),
+
+                # Defense - Yards allowed tiers
+                yds_allow_0_100=stats.get('yds_allow_0_100'),
+                yds_allow_100_199=stats.get('yds_allow_100_199'),
+                yds_allow_200_299=stats.get('yds_allow_200_299'),
+                yds_allow_300_349=stats.get('yds_allow_300_349'),
+                yds_allow_350_399=stats.get('yds_allow_350_399'),
+                yds_allow_400_449=stats.get('yds_allow_400_449'),
+                yds_allow_450_499=stats.get('yds_allow_450_499'),
+                yds_allow_500_549=stats.get('yds_allow_500_549'),
+                yds_allow_550p=stats.get('yds_allow_550p'),
+                yds_allow=stats.get('yds_allow'),
+
+                # Additional defensive stats
+                def_4_and_stop=stats.get('def_4_and_stop'),
+                def_st_td=stats.get('def_st_td'),
+                def_st_fum_rec=stats.get('def_st_fum_rec'),
+                def_st_ff=stats.get('def_st_ff'),
+                idp_tkl=stats.get('idp_tkl'),
+
+                # Special teams return stats
+                kr_yd=stats.get('kr_yd'),
+                pr_yd=stats.get('pr_yd'),
+                st_td=stats.get('st_td'),
+                st_fum_rec=stats.get('st_fum_rec'),
+                st_ff=stats.get('st_ff'),
+
                 raw_stats=stats
             )
             self.db.add(player_stats)
 
-    def _calculate_fantasy_points(self, stats: Dict, scoring_type: str = 'ppr', scoring_settings: Optional[Dict] = None) -> float:
-        """Calculate fantasy points based on stats and scoring settings"""
-        points = 0.0
-        
-        # Use scoring settings if provided, otherwise fall back to defaults
-        if scoring_settings:
-            # Passing - using correct Sleeper field names
-            points += (stats.get('pass_yd', 0) * scoring_settings.get('pass_yd', 0.04))
-            points += (stats.get('pass_td', 0) * scoring_settings.get('pass_td', 4))
-            points += (stats.get('pass_int', 0) * scoring_settings.get('pass_int', -2))
-            points += (stats.get('pass_2pt', 0) * scoring_settings.get('pass_2pt', 2))
-            
-            # Rushing - using correct Sleeper field names
-            points += (stats.get('rush_yd', 0) * scoring_settings.get('rush_yd', 0.1))
-            points += (stats.get('rush_td', 0) * scoring_settings.get('rush_td', 6))
-            points += (stats.get('rush_2pt', 0) * scoring_settings.get('rush_2pt', 2))
-            
-            # Receiving - using correct Sleeper field names
-            points += (stats.get('rec_yd', 0) * scoring_settings.get('rec_yd', 0.1))
-            points += (stats.get('rec_td', 0) * scoring_settings.get('rec_td', 6))
-            points += (stats.get('rec', 0) * scoring_settings.get('rec', 0))  # PPR value from settings
-            points += (stats.get('rec_2pt', 0) * scoring_settings.get('rec_2pt', 2))
-            
-            # Kicking
-            points += (stats.get('fgm', 0) * scoring_settings.get('fgm', 3))
-            points += (stats.get('xpm', 0) * scoring_settings.get('xpm', 1))
-            points += (stats.get('fgmiss', 0) * scoring_settings.get('fgmiss', 0))
-            
-            # Defense/Special Teams - using actual Sleeper field names
-            points += (stats.get('int', 0) * scoring_settings.get('def_int', 2))
-            points += (stats.get('fum_rec', 0) * scoring_settings.get('def_fumble_rec', 2))
-            points += (stats.get('sack', 0) * scoring_settings.get('def_sack', 1))
-            points += (stats.get('def_td', 0) * scoring_settings.get('def_td', 6))
-            points += (stats.get('safe', 0) * scoring_settings.get('def_safety', 2))
-            points += (stats.get('blk_kick', 0) * scoring_settings.get('def_block_kick', 2))
-            
-        else:
-            # Default scoring (fallback) - using correct Sleeper field names
-            # Passing
-            points += (stats.get('pass_yd', 0) * 0.04)  # 1 pt per 25 yards
-            points += (stats.get('pass_td', 0) * 4)      # 4 pts per TD
-            points += (stats.get('pass_int', 0) * -2)    # -2 pts per INT
-            
-            # Rushing
-            points += (stats.get('rush_yd', 0) * 0.1)   # 1 pt per 10 yards
-            points += (stats.get('rush_td', 0) * 6)      # 6 pts per TD
-            
-            # Receiving
-            points += (stats.get('rec_yd', 0) * 0.1)    # 1 pt per 10 yards
-            points += (stats.get('rec_td', 0) * 6)       # 6 pts per TD
-            
-            # PPR bonus
-            if scoring_type in ['ppr', 'half_ppr']:
-                multiplier = 1.0 if scoring_type == 'ppr' else 0.5
-                points += (stats.get('rec', 0) * multiplier)
-            
-            # Kicking
-            points += (stats.get('fgm', 0) * 3)          # 3 pts per FG
-            points += (stats.get('xpm', 0) * 1)          # 1 pt per XP
-        
-        return round(points, 2)
+    # Removed duplicate _calculate_fantasy_points method - now using shared utility
 
     async def calculate_league_specific_points(self, league_id: str, raw_stats: Dict) -> float:
         """Calculate fantasy points using league-specific scoring settings"""
         try:
             league_info = await self.client.get_league_info(league_id)
             scoring_settings = league_info.get('scoring_settings', {})
-            return self._calculate_fantasy_points(raw_stats, scoring_settings=scoring_settings)
+            if not scoring_settings:
+                raise ValueError(f"No scoring settings found for league {league_id}")
+
+            # Use shared scoring utility - assume half_ppr for sleeper service
+            points_dict = calculate_fantasy_points(raw_stats, scoring_settings)
+            return points_dict['half_ppr']
         except Exception as e:
-            logger.warning(f"Failed to get league scoring for {league_id}, using PPR default: {e}")
-            return self._calculate_fantasy_points(raw_stats, scoring_type='ppr')
+            logger.error(f"Failed to get league scoring for {league_id}: {e}")
+            raise RuntimeError(f"Cannot calculate fantasy points without league scoring settings for league {league_id}") from e
 
     def _should_sync_player_stats(self, stats: Dict) -> bool:
         """Determine if we should sync these player stats"""
         # Only sync if player has some statistical activity - using correct Sleeper field names
         return any(stats.get(key, 0) > 0 for key in [
-            'pass_yd', 'rush_yd', 'rec_yd', 'pass_td', 'rush_td', 'rec_td', 'sack', 'int'
+            # Basic offensive stats
+            'pass_yd', 'rush_yd', 'rec_yd', 'pass_td', 'rush_td', 'rec_td',
+
+            # Kicker stats
+            'fgm', 'xpm', 'fga', 'xpa', 'fgm_0_19', 'fgm_20_29', 'fgm_30_39', 'fgm_40_49', 'fgm_50_59', 'fgm_60p',
+            'fgmiss_0_19', 'fgmiss_20_29', 'fgmiss_30_39', 'fgmiss_40_49', 'xpmiss', 'fgm_yds',
+
+            # Defense stats
+            'sack', 'int', 'fum_rec', 'def_td', 'safe', 'blk_kick', 'def_4_and_stop', 'ff',
+
+            # Team defense points/yards allowed
+            'pts_allow_0', 'pts_allow_1_6', 'pts_allow_7_13', 'pts_allow_14_20', 'pts_allow_21_27', 'pts_allow_28_34', 'pts_allow_35p',
+            'yds_allow_0_100', 'yds_allow_100_199', 'yds_allow_200_299', 'yds_allow_300_349', 'yds_allow_350_399',
+            'yds_allow_400_449', 'yds_allow_450_499', 'yds_allow_500_549', 'yds_allow_550p',
+
+            # Special teams
+            'st_td', 'def_st_td', 'kr_yd', 'pr_yd', 'st_fum_rec', 'def_st_fum_rec', 'st_ff', 'def_st_ff',
+
+            # 2-point conversions
+            'pass_2pt', 'rush_2pt', 'rec_2pt', 'def_2pt',
+
+            # Other penalties/bonuses
+            'fum_lost', 'pass_sack', 'bonus_rec_te', 'fum_rec_td', 'idp_tkl'
         ])

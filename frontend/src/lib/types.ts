@@ -4,6 +4,8 @@ export interface Player {
     position: string;
     team: string;
     is_starter: boolean;
+    opponent?: string;
+    game_time?: string;
     player_details: {
       age: number | null;
       height: string | null;
@@ -190,7 +192,12 @@ export interface Player {
     player_name: string | null;
     position: string | null;
     team: string | null;
+    opponent?: string;
+    game_time?: string;
     projections: {
+      fantasy_points: number;
+    } | null;
+    actual_stats: {
       fantasy_points: number;
     } | null;
   }
@@ -221,6 +228,38 @@ export interface Player {
     is_complete: boolean;
   }
 
+  // Fantasy Week State types
+  export type FantasyWeekPhase = 
+    | 'planning'
+    | 'early_games' 
+    | 'pre_games'
+    | 'games_active'
+    | 'post_games'
+    | 'waivers_processing';
+
+  export interface FantasyPhaseInfo {
+    name: string;
+    description: string;
+    priority_actions: string[];
+    refresh_frequency_seconds: number;
+    focus_areas: string[];
+    urgency: 'low' | 'medium' | 'high';
+  }
+
+  export interface FantasyWeekState {
+    current_phase: FantasyWeekPhase;
+    phase_info: FantasyPhaseInfo;
+    next_phase: {
+      phase: FantasyWeekPhase;
+      transition_time: string;
+      time_until_transition: string;
+    };
+    should_auto_refresh: boolean;
+    recommended_sections: string[];
+    refresh_frequency_seconds: number;
+    timestamp: string;
+  }
+
   // UI State types
   export interface UIState {
     selectedPlayer: Player | null;
@@ -228,4 +267,5 @@ export interface Player {
     isLoading: boolean;
     selectedLeague: string | null;
     currentWeek: number;
+    weekState?: FantasyWeekState;
   }

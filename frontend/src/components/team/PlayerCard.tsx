@@ -3,32 +3,22 @@
 import React from 'react';
 import type { Player } from '@/lib/types';
 import { useUIStore } from '@/store/uiStore';
-import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
-import { Tooltip } from '@/components/ui/Tooltip';
-import { 
-  getPositionColor, 
-  getStatusColor, 
-  getStatusIcon, 
-  formatPoints,
-  getTrendIcon 
-} from '@/lib/utils';
+import { formatPoints } from '@/lib/utils';
 import { cn } from '@/lib/utils';
 
 interface PlayerCardProps {
   player: Player;
-  size?: 'small' | 'medium' | 'large';
-  showRanking?: boolean;
-  showProjection?: boolean;
+  rosterSlot?: string;
   className?: string;
+  reversed?: boolean;
 }
 
 export const PlayerCard: React.FC<PlayerCardProps> = ({
   player,
-  size = 'medium',
-  showRanking = true,
-  showProjection = true,
+  rosterSlot,
   className,
+  reversed = false,
 }) => {
   const { openPlayerModal } = useUIStore();
 
@@ -36,137 +26,115 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
     openPlayerModal(player);
   };
 
-  const sizeClasses = {
-    small: 'p-3',
-    medium: 'p-4',
-    large: 'p-4',
-  };
+  // Calculate difference between actual and projected
+  // Use ppr field which contains our league-specific scoring calculation
+  const actualPoints = player.actual_stats?.fantasy_points.ppr ?? 0;
+  const projectedPoints = player.projections?.fantasy_points ?? 0;
+  const difference = actualPoints - projectedPoints;
+  const hasActual = player.actual_stats !== null && player.actual_stats !== undefined;
 
-  const statusColor = getStatusColor(player.start_sit_recommendation, player.red_flags || []);
-  const statusIcon = getStatusIcon(player.start_sit_recommendation, player.red_flags || []);
-  const positionColor = getPositionColor(player.position);
+  // Get opponent matchup info from player data
+  const opponent = player.opponent || "vs ???";
+  const gameTime = player.game_time || "TBD";
 
   return (
-    <Card 
+    <div
       className={cn(
-        'cursor-pointer hover:scale-105 transition-all duration-200 border-2',
-        statusColor,
-        sizeClasses[size],
+        'flex items-center justify-between p-2 bg-dark-800 hover:bg-dark-700 rounded cursor-pointer transition-colors',
+        reversed && 'flex-row-reverse',
         className
       )}
-      padding="none"
       onClick={handleClick}
     >
-      <div className="space-y-3">
-        {/* Header */}
-        <div className="flex items-start justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center space-x-2 mb-1">
-              <Badge className={positionColor} size="sm">
-                {player.position}
-              </Badge>
-              <span className="text-xs text-dark-400">{player.team}</span>
-              {(player.red_flags?.length || 0) > 0 && (
-                <Tooltip content={player.red_flags?.join(', ') || ''}>
-                  <span className="text-danger-400">⚠️</span>
-                </Tooltip>
+      {/* Left side - Position slot and player info (or right side when reversed) */}
+      <div className={cn(
+        'flex items-center flex-1 min-w-0',
+        reversed ? 'space-x-reverse space-x-2 flex-row-reverse' : 'space-x-2'
+      )}>
+        {/* Roster slot badge */}
+        {rosterSlot && (
+          <Badge
+            variant="info"
+            size="sm"
+            className="text-dark-400 bg-dark-700 min-w-8 text-center text-xs px-1"
+          >
+            {rosterSlot}
+          </Badge>
+        )}
+
+        {/* Player info */}
+        <div className="flex-1 min-w-0">
+          <div className={cn(
+            'flex items-center',
+            reversed ? 'space-x-reverse space-x-1 flex-row-reverse justify-end' : 'space-x-1'
+          )}>
+            <Badge
+              size="sm"
+              className={cn(
+                'text-white text-xs px-1',
+                player.position === 'QB' ? 'bg-red-600' :
+                player.position === 'RB' ? 'bg-blue-600' :
+                player.position === 'WR' ? 'bg-green-600' :
+                player.position === 'TE' ? 'bg-yellow-600' :
+                player.position === 'K' ? 'bg-purple-600' :
+                player.position === 'DEF' ? 'bg-gray-600' : 'bg-dark-600'
               )}
-            </div>
-            <h3 className="font-semibold text-white text-sm truncate">
-              {player.player_name}
-            </h3>
-            {player.injury_status && (
-              <p className="text-xs text-danger-400">
-                {player.injury_status}
-              </p>
-            )}
+            >
+              {player.position}
+            </Badge>
+            <span className="text-xs text-dark-400">{player.team}</span>
           </div>
-          <div className="flex flex-col items-end space-y-1">
-            <span className="text-lg">{statusIcon}</span>
-            {player.rank_trend && (
-              <span className="text-xs">
-                {getTrendIcon(player.rank_trend)}
-              </span>
-            )}
+          <h3 className={cn(
+            'font-medium text-white text-xs truncate leading-tight',
+            reversed && 'text-right'
+          )}>
+            {player.player_name}
+          </h3>
+          <div className={cn(
+            'text-xs text-dark-500 leading-tight',
+            reversed && 'text-right'
+          )}>
+            {opponent} • {gameTime}
+          </div>
+        </div>
+      </div>
+
+      {/* Right side - Fantasy points (or left side when reversed) */}
+      <div className={cn(
+        'flex items-center text-xs',
+        reversed ? 'space-x-reverse space-x-2 flex-row-reverse' : 'space-x-2'
+      )}>
+        {/* Projected */}
+        <div className="text-center min-w-8">
+          <div className="text-success-400 font-medium">
+            {formatPoints(projectedPoints)}
           </div>
         </div>
 
-        {/* Rankings */}
-        {showRanking && (
-          <div className="space-y-2">
-            {player.consensus_rank && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-dark-400">Consensus Rank:</span>
-                <span className="text-sm font-medium text-white">
-                  #{Math.round(player.consensus_rank)}
-                </span>
-              </div>
-            )}
-            
-            {(player.rankings?.length || 0) > 0 && (
-              <div className="flex items-center space-x-2">
-                {player.rankings?.slice(0, 3).map((ranking, index) => (
-                  <Tooltip 
-                    key={index}
-                    content={`${ranking.source_name}: #${ranking.position_rank}`}
-                  >
-                    <div className="text-xs bg-dark-700 px-2 py-1 rounded">
-                      #{ranking.position_rank}
-                    </div>
-                  </Tooltip>
-                ))}
-                {(player.rankings?.length || 0) > 3 && (
-                  <span className="text-xs text-dark-400">
-                    +{(player.rankings?.length || 0) - 3} more
-                  </span>
-                )}
-              </div>
-            )}
-            
-            {/* New: Show consensus projections */}
-            {player.projections && (
-              <div className="flex items-center justify-between">
-                <span className="text-xs text-dark-400">Providers:</span>
-                <span className="text-sm font-medium text-primary-400">
-                  {player.projections.meta.provider_count}
-                </span>
-              </div>
-            )}
+        {/* Actual */}
+        <div className="text-center min-w-8">
+          <div className={cn(
+            "font-medium",
+            hasActual ? "text-primary-400" : "text-dark-600"
+          )}>
+            {hasActual ? formatPoints(actualPoints) : "-"}
           </div>
-        )}
+        </div>
 
-        {/* Projection */}
-        {showProjection && (player.latest_projection || player.projections) && (
-          <div className="flex items-center justify-between pt-2 border-t border-dark-700">
-            <span className="text-xs text-dark-400">Projected:</span>
-            <span className="text-sm font-medium text-success-400">
-              {formatPoints(player.projections?.fantasy_points || player.latest_projection || 0)} pts
-            </span>
+        {/* Difference */}
+        <div className="text-center min-w-8">
+          <div className={cn(
+            "font-medium",
+            !hasActual ? "text-dark-600" :
+            difference > 0 ? "text-success-400" :
+            difference < 0 ? "text-danger-400" : "text-warning-400"
+          )}>
+            {!hasActual ? "-" :
+             difference > 0 ? `+${formatPoints(difference)}` :
+             formatPoints(difference)}
           </div>
-        )}
-
-        {/* Confidence Score */}
-        {(player.confidence_score || player.projections?.meta.confidence_score) && (
-          <div className="flex items-center justify-between">
-            <span className="text-xs text-dark-400">Confidence:</span>
-            <div className="flex items-center space-x-1">
-              <div className="w-16 bg-dark-700 rounded-full h-1.5">
-                <div 
-                  className={cn(
-                    'h-1.5 rounded-full transition-all',
-                    (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.8 ? 'bg-success-500' :
-                    (player.projections?.meta.confidence_score || player.confidence_score || 0) > 0.6 ? 'bg-warning-500' : 'bg-danger-500'
-                  )}
-                  style={{ width: `${Math.min(100, ((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100)}%` }}
-                />
-              </div>
-              <span className="text-xs text-white">
-                {Math.min(100, Math.round(((player.projections?.meta.confidence_score || player.confidence_score || 0)) * 100))}%
-              </span>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
-    </Card>
+    </div>
   );
 };
