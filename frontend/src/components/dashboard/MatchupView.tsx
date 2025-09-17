@@ -112,46 +112,14 @@ export const MatchupView: React.FC<MatchupViewProps> = ({ week }) => {
 
   return (
     <div className="space-y-6">
-      {/* Week Selector */}
-      <Card>
-        <div className="flex items-center justify-between py-2">
-          <h3 className="text-lg font-semibold text-white">Week Selection</h3>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={() => setSelectedWeek(Math.max(1, selectedWeek - 1))}
-              disabled={selectedWeek <= 1}
-              className="px-3 py-1 bg-dark-700 text-white rounded hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              ←
-            </button>
-            <select
-              value={selectedWeek}
-              onChange={(e) => setSelectedWeek(Number(e.target.value))}
-              className="px-3 py-1 bg-dark-700 text-white rounded border border-dark-600 focus:border-primary-500"
-            >
-              {Array.from({ length: 18 }, (_, i) => i + 1).map(week => (
-                <option key={week} value={week}>
-                  Week {week}
-                  {week === currentWeek && ' (Current)'}
-                </option>
-              ))}
-            </select>
-            <button
-              onClick={() => setSelectedWeek(Math.min(18, selectedWeek + 1))}
-              disabled={selectedWeek >= 18}
-              className="px-3 py-1 bg-dark-700 text-white rounded hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              →
-            </button>
-          </div>
-        </div>
-      </Card>
-
-      {/* Matchup Header with totals */}
+      {/* Matchup Header with totals and week selector */}
       <MatchupHeader
         userPlayers={userTeam.data.lineup.starters}
         opponentPlayers={opponentPlayers}
         isByeWeek={!opponentTeam}
+        selectedWeek={selectedWeek}
+        currentWeek={currentWeek}
+        onWeekChange={setSelectedWeek}
       />
 
       {/* Teams in symmetrical layout */}

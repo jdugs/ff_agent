@@ -9,14 +9,21 @@ interface MatchupHeaderProps {
   userPlayers?: Player[];
   opponentPlayers?: Player[];
   isByeWeek?: boolean;
+  selectedWeek?: number;
+  currentWeek?: number;
+  onWeekChange?: (week: number) => void;
 }
 
 export const MatchupHeader: React.FC<MatchupHeaderProps> = ({
   userPlayers,
   opponentPlayers,
-  isByeWeek = false
+  isByeWeek = false,
+  selectedWeek,
+  currentWeek: propCurrentWeek,
+  onWeekChange
 }) => {
-  const { currentWeek } = useTeamStore();
+  const { currentWeek: storeCurrentWeek } = useTeamStore();
+  const currentWeek = propCurrentWeek || storeCurrentWeek;
 
   // Calculate user team totals
   const userTotals = React.useMemo(() => {
@@ -61,91 +68,119 @@ export const MatchupHeader: React.FC<MatchupHeaderProps> = ({
   const actualDiff = userTotals.actual - opponentTotals.actual;
   const showActual = userTotals.hasActual || opponentTotals.hasActual;
 
+  // Determine if this is a completed matchup (past week with actual stats)
+  const isCompletedMatchup = selectedWeek && currentWeek && selectedWeek < currentWeek && showActual;
+
   return (
     <Card>
-      <div className="text-center py-4">
-        <h2 className="text-lg font-bold text-white mb-4">Week {currentWeek} Matchup</h2>
+      <div className="text-center py-3">
+        {/* Header with Week Selector */}
+        <div className="flex justify-between items-center mb-3">
+          <h3 className="text-sm font-medium text-white">Your Team</h3>
 
-        {/* Team Names */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="text-left">
-            <h3 className="font-semibold text-white">Your Team</h3>
-          </div>
-          <div className="text-xs text-dark-400 px-2">VS</div>
-          <div className="text-right">
-            <h3 className="font-semibold text-white">
-              Opponent
-            </h3>
-          </div>
+          {/* Compact Week Selector */}
+          {onWeekChange ? (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => onWeekChange(Math.max(1, (selectedWeek || currentWeek || 1) - 1))}
+                disabled={(selectedWeek || currentWeek || 1) <= 1}
+                className="w-6 h-6 flex items-center justify-center bg-dark-700 text-white rounded text-xs hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                ←
+              </button>
+              <select
+                value={selectedWeek || currentWeek || 1}
+                onChange={(e) => onWeekChange(Number(e.target.value))}
+                className="px-2 py-1 bg-dark-700 text-white rounded text-xs border border-dark-600 focus:border-primary-500 min-w-16"
+              >
+                {Array.from({ length: 18 }, (_, i) => i + 1).map(week => (
+                  <option key={week} value={week}>
+                    Week {week}
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => onWeekChange(Math.min(18, (selectedWeek || currentWeek || 1) + 1))}
+                disabled={(selectedWeek || currentWeek || 1) >= 18}
+                className="w-6 h-6 flex items-center justify-center bg-dark-700 text-white rounded text-xs hover:bg-dark-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                →
+              </button>
+            </div>
+          ) : (
+            <div className="text-xs text-dark-400">Week {selectedWeek || currentWeek}</div>
+          )}
+
+          <h3 className="text-sm font-medium text-white">Opponent</h3>
         </div>
 
-        {/* Projected Totals */}
-        <div className="flex justify-between items-center mb-2">
-          <div className="text-center">
-            <div className="text-xl font-bold text-success-400">
-              {userTotals.projected.toFixed(2)}
+        {/* Main Scores */}
+        <div className="flex justify-between items-center">
+          {/* Your Score */}
+          <div className="text-center flex-1">
+            <div className="text-2xl font-bold text-white">
+              {showActual ? userTotals.actual.toFixed(1) : userTotals.projected.toFixed(1)}
             </div>
-          </div>
-          <div className="text-center px-4">
-            <div className="text-xs text-dark-500 mb-1">Projected</div>
-            <div className={`text-sm font-medium ${
-              projectedDiff > 0 ? 'text-success-400' :
-              projectedDiff < 0 ? 'text-danger-400' : 'text-warning-400'
-            }`}>
-              {projectedDiff > 0 ? '+' : ''}{projectedDiff.toFixed(2)}
-            </div>
-          </div>
-          <div className="text-center">
-            <div className="text-xl font-bold text-success-400">
-              {opponentTotals.projected.toFixed(2)}
-            </div>
-          </div>
-        </div>
-
-        {/* Actual Totals (if available) */}
-        {showActual && (
-          <div className="flex justify-between items-center border-t border-dark-700 pt-2">
-            <div className="text-center">
-              <div className="text-xl font-bold text-primary-400">
-                {userTotals.actual.toFixed(2)}
+            {showActual && (
+              <div className="text-xs text-dark-400">
+                Proj: {userTotals.projected.toFixed(1)}
               </div>
+            )}
+            {showActual && (
+              <div className={`text-xs font-medium ${
+                (userTotals.actual - userTotals.projected) > 0 ? 'text-success-400' :
+                (userTotals.actual - userTotals.projected) < 0 ? 'text-danger-400' : 'text-warning-400'
+              }`}>
+                {(userTotals.actual - userTotals.projected) > 0 ? '+' : ''}{(userTotals.actual - userTotals.projected).toFixed(1)}
+              </div>
+            )}
+          </div>
+
+          {/* VS and Status */}
+          <div className="text-center px-4">
+            <div className="text-xs text-dark-500 mb-1">VS</div>
+            <div className={`text-sm font-medium ${
+              showActual
+                ? (actualDiff > 0 ? 'text-success-400' : actualDiff < 0 ? 'text-danger-400' : 'text-warning-400')
+                : (projectedDiff > 0 ? 'text-success-400' : projectedDiff < 0 ? 'text-danger-400' : 'text-warning-400')
+            }`}>
+              {showActual ? (
+                isCompletedMatchup
+                  ? (actualDiff > 0 ? 'WON' : actualDiff < 0 ? 'LOST' : 'TIED')
+                  : (actualDiff > 0 ? 'WINNING' : actualDiff < 0 ? 'BEHIND' : 'TIED')
+              ) : (
+                projectedDiff > 0 ? 'FAVORED' : projectedDiff < 0 ? 'UNDERDOG' : 'EVEN'
+              )}
             </div>
-            <div className="text-center px-4">
-              <div className="text-xs text-dark-500 mb-1">Actual</div>
-              <div className={`text-sm font-medium ${
+            {showActual && (
+              <div className={`text-xs font-medium ${
                 actualDiff > 0 ? 'text-success-400' :
                 actualDiff < 0 ? 'text-danger-400' : 'text-warning-400'
               }`}>
-                {actualDiff > 0 ? '+' : ''}{actualDiff.toFixed(2)}
+                {actualDiff > 0 ? '+' : ''}{actualDiff.toFixed(1)}
               </div>
-            </div>
-            <div className="text-center">
-              <div className="text-xl font-bold text-primary-400">
-                {opponentTotals.actual.toFixed(2)}
-              </div>
-            </div>
+            )}
           </div>
-        )}
 
-        {/* Win Probability or Status */}
-        <div className="mt-3 pt-2 border-t border-dark-700">
-          {showActual ? (
-            <div className={`text-sm font-medium ${
-              actualDiff > 0 ? 'text-success-400' :
-              actualDiff < 0 ? 'text-danger-400' : 'text-warning-400'
-            }`}>
-              {actualDiff > 0 ? '🎉 You are winning!' :
-               actualDiff < 0 ? '📉 You are behind' : '🤝 It\'s tied!'}
+          {/* Opponent Score */}
+          <div className="text-center flex-1">
+            <div className="text-2xl font-bold text-white">
+              {showActual ? opponentTotals.actual.toFixed(1) : opponentTotals.projected.toFixed(1)}
             </div>
-          ) : (
-            <div className={`text-sm font-medium ${
-              projectedDiff > 0 ? 'text-success-400' :
-              projectedDiff < 0 ? 'text-danger-400' : 'text-warning-400'
-            }`}>
-              {projectedDiff > 0 ? '📈 Projected to win' :
-               projectedDiff < 0 ? '⚠️ Projected to lose' : '🤞 Projected tie'}
-            </div>
-          )}
+            {showActual && (
+              <div className="text-xs text-dark-400">
+                Proj: {opponentTotals.projected.toFixed(1)}
+              </div>
+            )}
+            {showActual && (
+              <div className={`text-xs font-medium ${
+                (opponentTotals.actual - opponentTotals.projected) > 0 ? 'text-success-400' :
+                (opponentTotals.actual - opponentTotals.projected) < 0 ? 'text-danger-400' : 'text-warning-400'
+              }`}>
+                {(opponentTotals.actual - opponentTotals.projected) > 0 ? '+' : ''}{(opponentTotals.actual - opponentTotals.projected).toFixed(1)}
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </Card>

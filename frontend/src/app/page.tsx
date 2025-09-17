@@ -74,9 +74,6 @@ export default function DashboardPage() {
       case 'dashboard':
         return (
           <div className="p-6 space-y-6">
-            {/* Week State Banner - Full Width */}
-            <WeekStateBanner />
-            
             {/* Team Banner - Full Width */}
             <TeamBanner team={currentTeam} />
 
@@ -89,6 +86,7 @@ export default function DashboardPage() {
 
               {/* Secondary Info */}
               <div className="space-y-6">
+                <WeekStateBanner />
                 <QuickActions team={currentTeam} />
                 <RecentNews players={currentTeam.data.lineup.starters} />
                 <WaiverTargets />

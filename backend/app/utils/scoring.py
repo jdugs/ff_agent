@@ -33,13 +33,6 @@ def calculate_stat_points(stats, scoring_settings: Dict, stat_mapping: Dict) -> 
         points_added = stat_value * scoring_value
         total_points += points_added
 
-        # Debug logging for defense stats and any non-zero contributions
-        if stat_value != 0 and scoring_value != 0:
-            # Check if this is a player with position 'DEF' or if it's a defense-related stat
-            is_defense_stat = any(keyword in stat_field for keyword in ['def_', 'pts_allow', 'yds_allow'])
-            if is_defense_stat or abs(scoring_value) >= 1:  # Log significant scoring values
-                print(f"DEBUG: {stat_field} = {stat_value} * {scoring_value} = {points_added}")
-
     return total_points
 
 def calculate_fantasy_points(stats, scoring_settings: Dict, player_position: Optional[str] = None) -> Dict[str, float]:
