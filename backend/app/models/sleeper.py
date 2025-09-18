@@ -187,6 +187,11 @@ class PlayerStats(Base, TimestampMixin):
     def_st_ff = Column(DECIMAL(4, 1))  # Special teams forced fumble
     idp_tkl = Column(Integer)          # Individual defensive player tackles
 
+    # Offensive player tackle stats (when they make defensive plays)
+    tkl = Column(Integer)              # Tackles by offensive players
+    tkl_solo = Column(Integer)         # Solo tackles by offensive players
+    tkl_ast = Column(Integer)          # Tackle assists by offensive players
+
     # Special teams return stats
     kr_yd = Column(Integer)            # Kick return yards
     pr_yd = Column(Integer)            # Punt return yards

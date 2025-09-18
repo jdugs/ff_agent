@@ -14,7 +14,10 @@ import argparse
 import sys
 from app.database import get_db
 from app.services.stats_service import StatsService
+from app.services.league_scoring_service import LeagueScoringService
+from app.models.sleeper import PlayerStats
 from app.config import settings
+from sqlalchemy import and_
 
 class SyncCommands:
     def __init__(self):
@@ -72,16 +75,61 @@ class SyncCommands:
         print(f"\n🎉 Sync complete! Total records synced: {total}")
         return total
 
+    async def recalculate_fantasy_points(self, league_id: str, week: int = None, season: str = None):
+        """Recalculate fantasy points for a league"""
+        season = season or settings.default_season
+
+        try:
+            scoring_service = LeagueScoringService(self.db)
+
+            # Build query for stats to recalculate
+            query = self.db.query(PlayerStats)
+
+            if week:
+                query = query.filter(PlayerStats.week == week)
+            if season:
+                query = query.filter(PlayerStats.season == season)
+
+            stats_list = query.all()
+
+            print(f"🧮 Recalculating fantasy points for {len(stats_list)} player stats in league {league_id}")
+
+            recalculated_count = 0
+            for stat in stats_list:
+                result = scoring_service.calculate_and_store_fantasy_points(
+                    league_id=league_id,
+                    stat_id=stat.stat_id,
+                    player_stats=stat,
+                    force_recalculate=True
+                )
+                if result is not None:
+                    recalculated_count += 1
+
+            print(f"✅ Recalculated fantasy points for {recalculated_count} player stats")
+            return recalculated_count
+
+        except Exception as e:
+            print(f"❌ Error recalculating fantasy points: {e}")
+            return 0
+
 async def main():
     parser = argparse.ArgumentParser(description='Sync fantasy football data')
-    parser.add_argument('command', choices=['stats', 'projections', 'both'],
+    parser.add_argument('command', choices=['stats', 'projections', 'both', 'recalc-points'],
                        help='What to sync')
-    parser.add_argument('--week', '-w', type=int, required=True,
-                       help='NFL week number')
+    parser.add_argument('--week', '-w', type=int,
+                       help='NFL week number (required for stats/projections)')
     parser.add_argument('--season', '-s', type=str,
                        help=f'NFL season (default: {settings.default_season})')
+    parser.add_argument('--league-id', '-l', type=str,
+                       help='League ID (required for recalc-points)')
 
     args = parser.parse_args()
+
+    # Validation
+    if args.command in ['stats', 'projections', 'both'] and not args.week:
+        parser.error(f"--week is required for {args.command}")
+    if args.command == 'recalc-points' and not args.league_id:
+        parser.error("--league-id is required for recalc-points")
 
     sync = SyncCommands()
 
@@ -94,6 +142,8 @@ async def main():
             await sync.sync_projections(args.week, args.season)
         elif args.command == 'both':
             await sync.sync_both(args.week, args.season)
+        elif args.command == 'recalc-points':
+            await sync.recalculate_fantasy_points(args.league_id, args.week, args.season)
 
     except KeyboardInterrupt:
         print("\n⏹️  Sync cancelled by user")

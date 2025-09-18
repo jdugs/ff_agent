@@ -298,12 +298,13 @@ class StatsService:
             xpmiss=raw_stats.get('xpmiss'),
 
             # Defensive stats
-            def_sack=raw_stats.get('def_sack'),
-            def_int=raw_stats.get('def_int'),
-            def_fumble_rec=raw_stats.get('def_fumble_rec'),
+            def_sack=raw_stats.get('sack'),
+            def_int=raw_stats.get('int'),
+            def_fumble_rec=raw_stats.get('fum_rec'),
             def_td=raw_stats.get('def_td'),
-            def_safety=raw_stats.get('def_safety'),
-            def_block_kick=raw_stats.get('def_block_kick'),
+            def_safety=raw_stats.get('safe'),
+            def_block_kick=raw_stats.get('blk_kick'),
+            def_4_and_stop=raw_stats.get('def_4_and_stop'),
             def_pass_def=raw_stats.get('def_pass_def'),
             def_tackle_solo=raw_stats.get('def_tackle_solo'),
             def_tackle_assist=raw_stats.get('def_tackle_assist'),
@@ -343,6 +344,14 @@ class StatsService:
 
             # IDP stats
             idp_tkl=raw_stats.get('idp_tkl'),
+
+            # Offensive player tackle stats
+            tkl=raw_stats.get('tkl'),
+            tkl_solo=raw_stats.get('tkl_solo'),
+            tkl_ast=raw_stats.get('tkl_ast'),
+
+            # Store raw stats for debugging
+            raw_stats=raw_stats,
         )
 
     def _update_player_stats(
@@ -405,12 +414,13 @@ class StatsService:
         existing.fgmiss_40_49 = raw_stats.get('fgmiss_40_49')
         existing.fgm_yds = raw_stats.get('fgm_yds')
         existing.xpmiss = raw_stats.get('xpmiss')
-        existing.def_sack = raw_stats.get('def_sack')
-        existing.def_int = raw_stats.get('def_int')
-        existing.def_fumble_rec = raw_stats.get('def_fumble_rec')
+        existing.def_sack = raw_stats.get('sack')
+        existing.def_int = raw_stats.get('int')
+        existing.def_fumble_rec = raw_stats.get('fum_rec')
         existing.def_td = raw_stats.get('def_td')
-        existing.def_safety = raw_stats.get('def_safety')
-        existing.def_block_kick = raw_stats.get('def_block_kick')
+        existing.def_safety = raw_stats.get('safe')
+        existing.def_block_kick = raw_stats.get('blk_kick')
+        existing.def_4_and_stop = raw_stats.get('def_4_and_stop')
         existing.def_pass_def = raw_stats.get('def_pass_def')
         existing.def_tackle_solo = raw_stats.get('def_tackle_solo')
         existing.def_tackle_assist = raw_stats.get('def_tackle_assist')
@@ -440,6 +450,10 @@ class StatsService:
         existing.st_fum_rec = raw_stats.get('st_fum_rec')
         existing.st_ff = raw_stats.get('st_ff')
         existing.idp_tkl = raw_stats.get('idp_tkl')
+        existing.tkl = raw_stats.get('tkl')
+        existing.tkl_solo = raw_stats.get('tkl_solo')
+        existing.tkl_ast = raw_stats.get('tkl_ast')
+        existing.raw_stats = raw_stats
 
     def _should_sync_player_stats(self, stats: Dict) -> bool:
         """Determine if player stats should be synced"""
@@ -449,7 +463,9 @@ class StatsService:
         # Check for meaningful stats (not all zeros)
         meaningful_stats = [
             'pass_yd', 'pass_td', 'rush_yd', 'rush_td', 'rec_yd', 'rec_td', 'rec',
-            'fgm', 'xpm', 'def_sack', 'def_int', 'def_td'
+            'fgm', 'xpm', 'def_sack', 'def_int', 'def_td', 'def_safety', 'def_fumble_rec',
+            'pts_allow_0', 'pts_allow_1_6', 'pts_allow_7_13', 'pts_allow_14_20',
+            'pts_allow_21_27', 'pts_allow_28_34', 'pts_allow_35p'
         ]
 
         return any(stats.get(stat, 0) > 0 for stat in meaningful_stats)
@@ -460,9 +476,11 @@ class StatsService:
             return False
 
         # Similar logic but for projections (can be non-zero floats)
+        # Use Sleeper API field names, not our database field names
         meaningful_projections = [
             'pass_yd', 'pass_td', 'rush_yd', 'rush_td', 'rec_yd', 'rec_td', 'rec',
-            'fgm', 'xpm', 'def_sack', 'def_int', 'def_td'
+            'fgm', 'xpm', 'sack', 'int', 'def_td', 'safe', 'fum_rec',
+            'def_4_and_stop', 'blk_kick'
         ]
 
         return any(float(projections.get(proj, 0)) > 0 for proj in meaningful_projections)
@@ -474,6 +492,7 @@ class StatsService:
             'pass_yd': 0.04,       # 1 point per 25 yards
             'pass_td': 4.0,        # 4 points per TD
             'pass_int': -2.0,      # -2 points per INT
+            'pass_sack': -0.25,    # -0.25 points per sack taken
             'pass_2pt': 2.0,       # 2 points per 2PT conversion
 
             # Rushing
@@ -521,6 +540,12 @@ class StatsService:
             'pts_allow_21_27': 0.0,   # 0 points for 21-27 allowed
             'pts_allow_28_34': -1.0,  # -1 point for 28-34 allowed
             'pts_allow_35p': -4.0,    # -4 points for 35+ allowed
+
+            # Offensive player defensive stats (unusual but some leagues have this)
+            'tkl': 1.0,              # +1 point for tackle by offensive player
+            'tkl_solo': 1.0,         # +1 point for solo tackle by offensive player
+            'tkl_ast': 0.5,          # +0.5 points for tackle assist by offensive player
+            'idp_tkl': 1.0,          # +1 point for IDP tackles
         }
 
     async def close(self):

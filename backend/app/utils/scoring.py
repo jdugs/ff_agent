@@ -158,7 +158,12 @@ def calculate_fantasy_points(
         'def_tackle_solo': 'def_tackle_solo',
         'def_tackle_assist': 'def_tackle_assist',
         'def_qb_hit': 'def_qb_hit',
-        'def_tfl': 'def_tfl'
+        'def_tfl': 'def_tfl',
+
+        # Offensive player defensive stats (turnovers/tackles)
+        'tkl': 'tkl',                    # Tackles by offensive players
+        'tkl_solo': 'tkl_solo',          # Solo tackles by offensive players
+        'tkl_ast': 'tkl_ast'             # Tackle assists by offensive players
     }
 
     # Calculate points using the mapping

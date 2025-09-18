@@ -131,16 +131,86 @@ class StatMappingService:
                 'pass_yds': 'pass_yds',
                 'pass_tds': 'pass_tds',
                 'pass_ints': 'pass_ints',
+                'pass_sack': 'pass_sack',
                 'rush_yds': 'rush_yds',
                 'rush_tds': 'rush_tds',
                 'rec_yds': 'rec_yds',
                 'rec_tds': 'rec_tds',
                 'rec': 'rec',
+                'fum_lost': 'fum_lost',
+
+                # Kicker stats
                 'fgm': 'fgm',
-                'xpm': 'xpm',
                 'fga': 'fga',
+                'xpm': 'xpm',
                 'xpa': 'xpa',
-                # Add more as needed - most should be 1:1 mapping
+                'xpmiss': 'xpmiss',
+                'fgm_yds': 'fgm_yds',
+
+                # Distance-based FG
+                'fgm_0_19': 'fgm_0_19',
+                'fgm_20_29': 'fgm_20_29',
+                'fgm_30_39': 'fgm_30_39',
+                'fgm_40_49': 'fgm_40_49',
+                'fgm_50_59': 'fgm_50_59',
+                'fgm_60p': 'fgm_60p',
+
+                # FG Misses
+                'fgmiss_0_19': 'fgmiss_0_19',
+                'fgmiss_20_29': 'fgmiss_20_29',
+                'fgmiss_30_39': 'fgmiss_30_39',
+                'fgmiss_40_49': 'fgmiss_40_49',
+
+                # Defense stats
+                'def_sack': 'def_sack',
+                'def_int': 'def_int',
+                'def_fumble_rec': 'def_fumble_rec',
+                'def_td': 'def_td',
+                'def_safety': 'def_safety',
+                'def_block_kick': 'def_block_kick',
+                'def_4_and_stop': 'def_4_and_stop',
+
+                # Points allowed tiers
+                'pts_allow_0': 'pts_allow_0',
+                'pts_allow_1_6': 'pts_allow_1_6',
+                'pts_allow_7_13': 'pts_allow_7_13',
+                'pts_allow_14_20': 'pts_allow_14_20',
+                'pts_allow_21_27': 'pts_allow_21_27',
+                'pts_allow_28_34': 'pts_allow_28_34',
+                'pts_allow_35p': 'pts_allow_35p',
+
+                # Yards allowed tiers
+                'yds_allow_0_100': 'yds_allow_0_100',
+                'yds_allow_100_199': 'yds_allow_100_199',
+                'yds_allow_200_299': 'yds_allow_200_299',
+                'yds_allow_300_349': 'yds_allow_300_349',
+                'yds_allow_350_399': 'yds_allow_350_399',
+                'yds_allow_400_449': 'yds_allow_400_449',
+                'yds_allow_450_499': 'yds_allow_450_499',
+                'yds_allow_500_549': 'yds_allow_500_549',
+                'yds_allow_550p': 'yds_allow_550p',
+
+                # Continuous defense
+                'pts_allow': 'pts_allow',
+                'yds_allow': 'yds_allow',
+
+                # IDP and special stats
+                'idp_tkl': 'idp_tkl',
+                'tkl': 'tkl',
+                'tkl_solo': 'tkl_solo',
+                'tkl_ast': 'tkl_ast',
+                'def_pass_def': 'def_pass_def',
+                'def_tackle_solo': 'def_tackle_solo',
+                'def_tackle_assist': 'def_tackle_assist',
+                'def_qb_hit': 'def_qb_hit',
+                'def_tfl': 'def_tfl',
+
+                # Special teams
+                'st_td': 'st_td',
+                'kr_yd': 'kr_yd',
+                'pr_yd': 'pr_yd',
+                'st_fum_rec': 'st_fum_rec',
+                'st_ff': 'st_ff',
             },
 
             StatType.CONSENSUS_PROJECTIONS: {

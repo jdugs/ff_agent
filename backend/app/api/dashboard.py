@@ -169,14 +169,31 @@ async def get_roster_dashboard(
                 SleeperMatchup.week == week
             ).first()
 
-            if matchup and matchup.starters:
-                starter_ids = matchup.starters
+            if matchup:
+                # Use historical starters from matchup data
+                if matchup.starters:
+                    starter_ids = matchup.starters
+
+                # Use historical roster from players_points (includes all rostered players that week)
+                if matchup.players_points:
+                    historical_player_ids = list(matchup.players_points.keys())
+                    # Filter out None values and convert to list
+                    all_player_ids = [pid for pid in historical_player_ids if pid]
+                else:
+                    # Fallback to current roster if no historical data
+                    all_player_ids = roster.player_ids or []
+
+                if not starter_ids:
+                    # Fallback to current roster starters if no historical starters
+                    starter_ids = roster.starters or []
             else:
-                # Fallback to current roster starters if no historical data
+                # Fallback to current roster if no matchup data
                 starter_ids = roster.starters or []
+                all_player_ids = roster.player_ids or []
         else:
-            # Use current roster starters if no week specified
+            # Use current roster for current week view
             starter_ids = roster.starters or []
+            all_player_ids = roster.player_ids or []
         
         if not all_player_ids:
             return {
@@ -284,14 +301,46 @@ async def get_roster_dashboard(
                 from app.services.stat_mapping_service import StatType
                 consensus_stats = consensus.consensus_projections
 
-                # Calculate league-specific fantasy points using league scoring service
-                scoring_settings = league_scoring_service.get_league_scoring_settings(league_id)
-                league_fantasy_points = calculate_fantasy_points(
-                    consensus_stats,
-                    scoring_settings,
-                    player.position,
-                    StatType.CONSENSUS_PROJECTIONS
-                )
+                # First try to get stored league-specific projection calculations
+                projection_stat = db.query(PlayerStats).filter(
+                    PlayerStats.player_id == player.player_id,
+                    PlayerStats.week == week,
+                    PlayerStats.season == season,
+                    PlayerStats.stat_type == 'projection'
+                ).first()
+
+                if projection_stat:
+                    # Use stored league-specific calculation
+                    stored_calculation = league_scoring_service.get_stored_fantasy_points(
+                        league_id, projection_stat.stat_id
+                    )
+                    if stored_calculation:
+                        league_fantasy_points = {
+                            'ppr': stored_calculation['fantasy_points'],
+                            'standard': stored_calculation['fantasy_points'],
+                            'half_ppr': stored_calculation['fantasy_points']
+                        }
+                    else:
+                        # Calculate and store if not exists
+                        fantasy_points = league_scoring_service.calculate_and_store_fantasy_points(
+                            league_id=league_id,
+                            stat_id=projection_stat.stat_id,
+                            player_stats=projection_stat
+                        )
+                        league_fantasy_points = {
+                            'ppr': fantasy_points or 0,
+                            'standard': fantasy_points or 0,
+                            'half_ppr': fantasy_points or 0
+                        }
+                else:
+                    # Fall back to consensus calculation
+                    scoring_settings = league_scoring_service.get_league_scoring_settings(league_id)
+                    league_fantasy_points = calculate_fantasy_points(
+                        consensus_stats,
+                        scoring_settings,
+                        player.position,
+                        StatType.CONSENSUS_PROJECTIONS
+                    )
 
                 player_data['projections'] = {
                     'fantasy_points': round(league_fantasy_points.get('half_ppr', 0), 2),

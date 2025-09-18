@@ -140,7 +140,22 @@ async def get_league(league_id: str, db: Session = Depends(get_db)):
     league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
-    return league
+
+    # Convert League object to LeagueResponse
+    try:
+        league_response = LeagueResponse(
+            league_id=str(league.league_id) if league.league_id else "",
+            league_name=str(league.league_name) if league.league_name else "Unknown League",
+            season=str(league.season) if league.season else "2024",
+            status=str(league.status) if league.status else "in_season",
+            total_rosters=int(league.total_teams) if league.total_teams is not None else 0,
+            scoring_settings=league.scoring_settings,
+            roster_positions=league.roster_positions
+        )
+        return league_response
+    except Exception as e:
+        logger.error(f"Failed to serialize league {league.league_id}: {e}")
+        raise HTTPException(status_code=500, detail="Failed to serialize league data")
 
 @router.get("/league/{league_id}/rosters", response_model=List[RosterResponse])
 async def get_league_rosters(league_id: str, db: Session = Depends(get_db)):

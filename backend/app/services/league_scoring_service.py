@@ -65,8 +65,9 @@ class LeagueScoringService:
             # Get league scoring settings
             scoring_settings = self.get_league_scoring_settings(league_id)
 
-            # Determine stat type for proper mapping
-            stat_type = StatType.ACTUAL_STATS if player_stats.stat_type == 'actual' else StatType.RAW_PROJECTIONS
+            # Both actual stats and projections use the same PlayerStats database fields
+            # so they both use ACTUAL_STATS mapping
+            stat_type = StatType.ACTUAL_STATS
 
             # Normalize stats using mapping service
             normalized_stats = self.stat_mapper.normalize_stats(
@@ -74,10 +75,14 @@ class LeagueScoringService:
                 stat_type=stat_type
             )
 
+            # Get player position for position-specific bonuses (like TE premium)
+            player_position = player_stats.player.position if player_stats.player else None
+
             # Calculate fantasy points using scoring function
             fantasy_points_dict = calculate_fantasy_points(
                 stats=normalized_stats,
-                scoring_settings=scoring_settings
+                scoring_settings=scoring_settings,
+                player_position=player_position
             )
 
             # Use PPR scoring as default (most common format)
@@ -194,12 +199,13 @@ class LeagueScoringService:
 
         # Calculate points per category
         categories = {
-            'passing': ['pass_yds', 'pass_tds', 'pass_ints', 'pass_2pt'],
+            'passing': ['pass_yds', 'pass_tds', 'pass_ints', 'pass_sack', 'pass_2pt'],
             'rushing': ['rush_yds', 'rush_tds', 'rush_2pt'],
             'receiving': ['rec_yds', 'rec_tds', 'rec', 'rec_2pt'],
             'kicking': ['fgm', 'xpm', 'fgm_40_49', 'fgm_50_59', 'fgm_60p'],
             'defense': ['def_sack', 'def_int', 'def_td', 'def_safety'],
-            'fumbles': ['fum_lost']
+            'fumbles': ['fum_lost'],
+            'tackles': ['tkl', 'tkl_solo', 'tkl_ast']  # Offensive player tackles
         }
 
         for category, stat_fields in categories.items():
@@ -222,6 +228,7 @@ class LeagueScoringService:
             'pass_yds': 'pass_yd',
             'pass_tds': 'pass_td',
             'pass_ints': 'pass_int',
+            'pass_sack': 'pass_sack',
             'rush_yds': 'rush_yd',
             'rush_tds': 'rush_td',
             'rec_yds': 'rec_yd',
@@ -233,6 +240,9 @@ class LeagueScoringService:
             'def_sack': 'sack',
             'def_int': 'int',
             'def_td': 'def_td',
+            'tkl': 'tkl',
+            'tkl_solo': 'tkl_solo',
+            'tkl_ast': 'tkl_ast',
             # Add more mappings as needed
         }
         return mapping.get(stat_field, stat_field)
@@ -244,6 +254,7 @@ class LeagueScoringService:
             'pass_yd': 0.04,       # 1 point per 25 yards
             'pass_td': 4.0,        # 4 points per TD
             'pass_int': -2.0,      # -2 points per INT
+            'pass_sack': -0.25,    # -0.25 points per sack taken
             'pass_2pt': 2.0,       # 2 points per 2PT conversion
 
             # Rushing
@@ -291,4 +302,10 @@ class LeagueScoringService:
             'pts_allow_21_27': 0.0,   # 0 points for 21-27 allowed
             'pts_allow_28_34': -1.0,  # -1 point for 28-34 allowed
             'pts_allow_35p': -4.0,    # -4 points for 35+ allowed
+
+            # Offensive player defensive stats (unusual but some leagues have this)
+            'tkl': 1.0,              # +1 point for tackle by offensive player
+            'tkl_solo': 1.0,         # +1 point for solo tackle by offensive player
+            'tkl_ast': 0.5,          # +0.5 points for tackle assist by offensive player
+            'idp_tkl': 1.0,          # +1 point for IDP tackles
         }

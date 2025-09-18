@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from app.database import get_db, create_tables
 from app.config import settings
-from app.api import players, sources, dashboard, sleeper, team_dashboard, projections, player_data
+from app.api import players, sources, dashboard, sleeper, team_dashboard, projections, player_data, debug_scoring
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -40,6 +40,7 @@ app.include_router(sleeper.router, prefix="/api/v1/sleeper", tags=["sleeper"])
 app.include_router(team_dashboard.router, prefix="/api/v1/team", tags=["team-dashboard"])
 app.include_router(projections.router, prefix="/api/v1/projections", tags=["projections"])
 app.include_router(player_data.router, prefix="/api/v1/player-data", tags=["player-data"])
+app.include_router(debug_scoring.router, prefix="/api/v1/debug", tags=["debug"])
 
 @app.get("/")
 async def root():
