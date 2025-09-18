@@ -4,7 +4,9 @@ from sqlalchemy import desc, func
 from typing import List, Optional, Dict, Any
 from app.database import get_db
 from app.services.sleeper_service import SleeperService
-from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer, SleeperPlayerProjections, SleeperPlayerStats, SleeperMatchup
+from app.models.sleeper import SleeperPlayerProjections, PlayerStats, SleeperMatchup
+from app.models.leagues import League
+from app.models.rosters import Roster
 from app.models.players import Player
 from app.models.rankings import Ranking, PlayerProjection
 from app.models.sources import Source
@@ -87,18 +89,18 @@ async def get_team_dashboard(
     """Get comprehensive team dashboard with rankings, projections, and recommendations"""
     
     # Get league and verify user access
-    league = db.query(SleeperLeague).filter(
-        SleeperLeague.league_id == league_id,
-        SleeperLeague.user_id == user_id
+    league = db.query(League).filter(
+        League.league_id == league_id,
+        League.user_id == user_id
     ).first()
     
     if not league:
         raise HTTPException(status_code=404, detail="League not found or access denied")
     
     # Get user's roster using the sleeper_user_id (NOT the user_id)
-    roster = db.query(SleeperRoster).filter(
-        SleeperRoster.league_id == league_id,
-        SleeperRoster.owner_id == league.sleeper_user_id  # Use sleeper_user_id here!
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id,
+        Roster.owner_id == league.sleeper_user_id  # Use sleeper_user_id here!
     ).first()
     
     if not roster:
@@ -125,9 +127,9 @@ async def get_team_dashboard(
     if roster.player_ids:
         starter_ids = roster.starters or []
         
-        for sleeper_player_id in roster.player_ids:
+        for player_id in roster.player_ids:
             player_data = await _get_player_dashboard_data(
-                db, sleeper_player_id, week, year, starter_ids
+                db, player_id, week, year, starter_ids
             )
             
             if player_data:
@@ -158,7 +160,7 @@ async def get_team_dashboard(
 
 async def _get_player_dashboard_data(
     db: Session, 
-    sleeper_player_id: str, 
+    player_id: str, 
     week: int, 
     year: int,
     starter_ids: List[str]
@@ -166,22 +168,23 @@ async def _get_player_dashboard_data(
     """Get comprehensive data for a single player"""
     
     # Get Sleeper player info
-    sleeper_player = db.query(SleeperPlayer).filter(
-        SleeperPlayer.sleeper_player_id == sleeper_player_id
+    player = db.query(Player).filter(
+        Player.player_id == player_id
     ).first()
     
-    if not sleeper_player:
+    if not player:
         return None
     
     # Get latest stats (previous week)
-    latest_stats = db.query(SleeperPlayerStats).filter(
-        SleeperPlayerStats.sleeper_player_id == sleeper_player_id,
-        SleeperPlayerStats.season == str(year)
-    ).order_by(desc(SleeperPlayerStats.week)).first()
+    latest_stats = db.query(PlayerStats).filter(
+        PlayerStats.player_id == player_id,
+        PlayerStats.season == str(year),
+        PlayerStats.stat_type == 'actual'
+    ).order_by(desc(PlayerStats.week)).first()
     
     # Get projections for current week
     projections = db.query(SleeperPlayerProjections).filter(
-        SleeperPlayerProjections.sleeper_player_id == sleeper_player_id,
+        SleeperPlayerProjections.sleeper_player_id == player_id,
         SleeperPlayerProjections.week == week,
         SleeperPlayerProjections.season == str(year)
     ).first()
@@ -197,18 +200,18 @@ async def _get_player_dashboard_data(
         last_week_points = float(latest_stats.fantasy_points_ppr or 0)
     
     return TeamPlayerData(
-        sleeper_id=sleeper_player_id,
-        name=sleeper_player.full_name or "Unknown Player",
-        position=sleeper_player.position or "UNKNOWN",
-        team=sleeper_player.team or "FA",
-        is_starter=sleeper_player_id in starter_ids,
+        sleeper_id=player_id,
+        name=player.full_name or "Unknown Player",
+        position=player.position or "UNKNOWN",
+        team=player.team or "FA",
+        is_starter=player_id in starter_ids,
         rankings=[],  # Still empty until we add ranking sources
         consensus_rank=None,
         rank_trend=None,
         latest_projection=latest_projection,
         projection_range=None,
         recent_news=[],
-        injury_status=sleeper_player.status if sleeper_player.status != 'Active' else None,
+        injury_status=player.status if player.status != 'Active' else None,
         red_flags=[],
         start_sit_recommendation=None,
         confidence_score=None,
@@ -269,9 +272,9 @@ def _generate_weekly_outlook(starters: List[TeamPlayerData], week: int) -> Dict[
 def _calculate_league_rank(db: Session, league_id: str, roster_id: int) -> Optional[int]:
     """Calculate current league ranking"""
     try:
-        rosters = db.query(SleeperRoster).filter(
-            SleeperRoster.league_id == league_id
-        ).order_by(desc(SleeperRoster.fpts)).all()
+        rosters = db.query(Roster).filter(
+            Roster.league_id == league_id
+        ).order_by(desc(Roster.fpts)).all()
         
         for i, roster in enumerate(rosters, 1):
             if roster.roster_id == roster_id:

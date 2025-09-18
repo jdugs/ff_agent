@@ -4,7 +4,8 @@ from app.integrations.fantasypros_api import FantasyProsAPIClient
 from app.services.sleeper_service import SleeperService
 from app.services.projection_sources import ProviderManager, DataCapability
 from app.services.player_id_mapping_service import PlayerIDMappingService
-from app.models.sleeper import SleeperPlayerProjections, SleeperPlayer
+from app.models.sleeper import SleeperPlayerProjections
+from app.models.players import Player
 from app.config import settings
 import logging
 from datetime import datetime
@@ -205,7 +206,7 @@ class ProjectionService:
         normalized_players = []
         
         for projection in projections:
-            player = projection.player  # Get the related SleeperPlayer
+            player = projection.player  # Get the related Player
             
             normalized_player = {
                 'source': 'sleeper',
@@ -213,16 +214,7 @@ class ProjectionService:
                 'team': player.team if player else '',
                 'position': player.position if player else '',
                 'sleeper_id': projection.sleeper_player_id,
-                'projections': {
-                    'fantasy_points': float(projection.projected_points_ppr or 0),
-                    'passing_yards': projection.proj_pass_yds or 0,
-                    'passing_tds': projection.proj_pass_tds or 0,
-                    'rushing_yards': projection.proj_rush_yds or 0,
-                    'rushing_tds': projection.proj_rush_tds or 0,
-                    'receiving_yards': projection.proj_rec_yds or 0,
-                    'receiving_tds': projection.proj_rec_tds or 0,
-                    'receptions': projection.proj_rec or 0,
-                },
+                'projections': self._extract_all_projections(projection.raw_projections, player.position if player else ''),
                 'raw_data': projection.raw_projections
             }
             normalized_players.append(normalized_player)
@@ -232,6 +224,155 @@ class ProjectionService:
             'source': 'sleeper',
             'timestamp': datetime.now().isoformat()
         }
+
+    def _extract_all_projections(self, raw_projections: Dict, position: str) -> Dict[str, float]:
+        """Extract all available projections with position-specific filtering"""
+        if not raw_projections:
+            return {}
+
+        # Base projections available for all positions
+        projections = {
+            'fantasy_points': float(raw_projections.get('pts_ppr', 0)),
+            'fantasy_points_standard': float(raw_projections.get('pts_std', 0)),
+            'fantasy_points_half_ppr': float(raw_projections.get('pts_half_ppr', 0)),
+        }
+
+        # Offensive stats
+        if position in ['QB', 'RB', 'WR', 'TE', 'FLEX']:
+            projections.update({
+                # Passing
+                'passing_yards': raw_projections.get('pass_yd', 0),
+                'passing_tds': raw_projections.get('pass_td', 0),
+                'passing_attempts': raw_projections.get('pass_att', 0),
+                'passing_completions': raw_projections.get('pass_cmp', 0),
+                'passing_interceptions': raw_projections.get('pass_int', 0),
+
+                # Rushing
+                'rushing_yards': raw_projections.get('rush_yd', 0),
+                'rushing_tds': raw_projections.get('rush_td', 0),
+                'rushing_attempts': raw_projections.get('rush_att', 0),
+
+                # Receiving
+                'receiving_yards': raw_projections.get('rec_yd', 0),
+                'receiving_tds': raw_projections.get('rec_td', 0),
+                'receptions': raw_projections.get('rec', 0),
+                'targets': raw_projections.get('rec_tgt', 0),
+
+                # Negative plays
+                'fumbles_lost': raw_projections.get('fum_lost', 0),
+            })
+
+        # Kicker stats
+        if position == 'K':
+            projections.update({
+                'field_goals_made': raw_projections.get('fgm', 0),
+                'field_goals_attempted': raw_projections.get('fga', 0),
+                'extra_points_made': raw_projections.get('xpm', 0),
+                'extra_points_attempted': raw_projections.get('xpa', 0),
+                'field_goal_yards': raw_projections.get('fgm_yds', 0),
+
+                # Distance-based FG makes
+                'fg_0_19': raw_projections.get('fgm_0_19', 0),
+                'fg_20_29': raw_projections.get('fgm_20_29', 0),
+                'fg_30_39': raw_projections.get('fgm_30_39', 0),
+                'fg_40_49': raw_projections.get('fgm_40_49', 0),
+                'fg_50_plus': raw_projections.get('fgm_50p', 0),
+            })
+
+        # Defense stats
+        if position == 'DEF':
+            projections.update({
+                'sacks': raw_projections.get('sack', 0),
+                'interceptions': raw_projections.get('int', 0),
+                'fumble_recoveries': raw_projections.get('fum_rec', 0),
+                'defensive_tds': raw_projections.get('def_td', 0),
+                'safeties': raw_projections.get('safe', 0),
+                'blocked_kicks': raw_projections.get('blk_kick', 0),
+                'fourth_down_stops': raw_projections.get('def_4_and_stop', 0),
+
+                # Points allowed tiers
+                'pts_allow_0': raw_projections.get('pts_allow_0', 0),
+                'pts_allow_1_6': raw_projections.get('pts_allow_1_6', 0),
+                'pts_allow_7_13': raw_projections.get('pts_allow_7_13', 0),
+                'pts_allow_14_20': raw_projections.get('pts_allow_14_20', 0),
+                'pts_allow_21_27': raw_projections.get('pts_allow_21_27', 0),
+                'pts_allow_28_34': raw_projections.get('pts_allow_28_34', 0),
+                'pts_allow_35_plus': raw_projections.get('pts_allow_35p', 0),
+
+                # Yards allowed tiers
+                'yds_allow_0_100': raw_projections.get('yds_allow_0_100', 0),
+                'yds_allow_100_199': raw_projections.get('yds_allow_100_199', 0),
+                'yds_allow_200_299': raw_projections.get('yds_allow_200_299', 0),
+                'yds_allow_300_349': raw_projections.get('yds_allow_300_349', 0),
+                'yds_allow_350_399': raw_projections.get('yds_allow_350_399', 0),
+                'yds_allow_400_plus': raw_projections.get('yds_allow_400_449', 0),
+            })
+
+        return projections
+
+    @staticmethod
+    def get_position_display_stats(position: str) -> Dict[str, str]:
+        """Get position-specific stats to display in UI with labels"""
+
+        stat_mappings = {
+            'QB': {
+                'fantasy_points': 'Fantasy Points',
+                'passing_yards': 'Pass Yds',
+                'passing_tds': 'Pass TDs',
+                'passing_interceptions': 'INTs',
+                'rushing_yards': 'Rush Yds',
+                'rushing_tds': 'Rush TDs',
+                'fumbles_lost': 'Fumbles'
+            },
+            'RB': {
+                'fantasy_points': 'Fantasy Points',
+                'rushing_yards': 'Rush Yds',
+                'rushing_tds': 'Rush TDs',
+                'rushing_attempts': 'Carries',
+                'receiving_yards': 'Rec Yds',
+                'receiving_tds': 'Rec TDs',
+                'receptions': 'Receptions',
+                'fumbles_lost': 'Fumbles'
+            },
+            'WR': {
+                'fantasy_points': 'Fantasy Points',
+                'receiving_yards': 'Rec Yds',
+                'receiving_tds': 'Rec TDs',
+                'receptions': 'Receptions',
+                'targets': 'Targets',
+                'rushing_yards': 'Rush Yds',
+                'rushing_tds': 'Rush TDs'
+            },
+            'TE': {
+                'fantasy_points': 'Fantasy Points',
+                'receiving_yards': 'Rec Yds',
+                'receiving_tds': 'Rec TDs',
+                'receptions': 'Receptions',
+                'targets': 'Targets'
+            },
+            'K': {
+                'fantasy_points': 'Fantasy Points',
+                'field_goals_made': 'FG Made',
+                'field_goals_attempted': 'FG Att',
+                'extra_points_made': 'XP Made',
+                'fg_40_49': 'FG 40-49',
+                'fg_50_plus': 'FG 50+'
+            },
+            'DEF': {
+                'fantasy_points': 'Fantasy Points',
+                'sacks': 'Sacks',
+                'interceptions': 'INTs',
+                'fumble_recoveries': 'Fum Rec',
+                'defensive_tds': 'Def TDs',
+                'safeties': 'Safeties',
+                'pts_allow_0': 'Shutouts',
+                'blocked_kicks': 'Blocks'
+            }
+        }
+
+        return stat_mappings.get(position, {
+            'fantasy_points': 'Fantasy Points'
+        })
     
     async def save_fantasypros_projections(self, week: Optional[int] = None, season: Optional[str] = None) -> Dict[str, Any]:
         """
@@ -352,7 +493,7 @@ class ProjectionService:
         try:
             # Check if projection already exists
             existing = self.db.query(SleeperPlayerProjections).filter(
-                SleeperPlayerProjections.sleeper_player_id == sleeper_player.sleeper_player_id,
+                SleeperPlayerProjections.sleeper_player_id == sleeper_player.player_id,
                 SleeperPlayerProjections.season == season,
                 SleeperPlayerProjections.week == (week or 0)  # Use 0 for season-long
             ).first()
@@ -376,7 +517,7 @@ class ProjectionService:
             else:
                 # Create new projection
                 new_projection = SleeperPlayerProjections(
-                    sleeper_player_id=sleeper_player.sleeper_player_id,
+                    sleeper_player_id=sleeper_player.player_id,
                     week=week or 0,  # Use 0 for season-long projections
                     season=season,
                     projected_points_ppr=projections.get('fantasy_points', 0),
@@ -423,7 +564,7 @@ class ProjectionService:
         logger.info(f"Loading saved FantasyPros projections for {'week ' + str(week) if week else 'season'} {season}")
         
         # Query saved projections
-        projections_query = self.db.query(SleeperPlayerProjections).join(SleeperPlayer).filter(
+        projections_query = self.db.query(SleeperPlayerProjections).join(Player).filter(
             SleeperPlayerProjections.season == season,
             SleeperPlayerProjections.week == db_week
         )
@@ -441,7 +582,7 @@ class ProjectionService:
         # Convert to normalized format
         normalized_players = []
         for projection in saved_projections:
-            player = projection.player  # Get related SleeperPlayer
+            player = projection.player  # Get related Player
             
             normalized_player = {
                 'source': 'fantasypros_saved',

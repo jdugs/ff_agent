@@ -5,7 +5,9 @@ from app.database import get_db
 from app.models.players import Player, NFLTeam
 from app.models.rankings import Ranking
 from app.models.sources import Source
-from app.models.sleeper import SleeperLeague, SleeperPlayer, SleeperRoster, SleeperPlayerStats, SleeperMatchup
+from app.models.sleeper import PlayerStats, SleeperMatchup
+from app.models.leagues import League
+from app.models.rosters import Roster
 from app.config import settings
 from app.services.nfl_schedule_service import NFLScheduleService
 from app.services.fantasy_week_state_service import FantasyWeekStateService, FantasyWeekPhase
@@ -25,7 +27,7 @@ class DashboardStats(BaseModel):
     total_rankings: int
     active_sources: int
     sleeper_leagues: int
-    sleeper_players: int
+    players_count: int
 
 class TopPlayer(BaseModel):
     player_id: str
@@ -39,8 +41,8 @@ class SleeperLeagueStats(BaseModel):
     league_id: str
     league_name: str
     season: str
-    total_rosters: int
-    last_synced: str
+    total_rosters: int = 0  # Make it optional with default
+    last_synced: str = "Never"  # Make it optional with default
 
 @router.get("/stats", response_model=DashboardStats)
 async def get_dashboard_stats(db: Session = Depends(get_db)):
@@ -49,8 +51,8 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
     total_sources = db.query(Source).count()
     total_rankings = db.query(Ranking).count()
     active_sources = db.query(Source).filter(Source.is_active == True).count()
-    sleeper_leagues = db.query(SleeperLeague).count()
-    sleeper_players = db.query(SleeperPlayer).count()
+    sleeper_leagues = db.query(League).count()
+    players_count = db.query(Player).count()
     
     return DashboardStats(
         total_players=total_players,
@@ -58,22 +60,30 @@ async def get_dashboard_stats(db: Session = Depends(get_db)):
         total_rankings=total_rankings,
         active_sources=active_sources,
         sleeper_leagues=sleeper_leagues,
-        sleeper_players=sleeper_players
+        players_count=players_count
     )
 
 @router.get("/sleeper/leagues", response_model=List[SleeperLeagueStats])
 async def get_sleeper_leagues(db: Session = Depends(get_db)):
     """Get all synced Sleeper leagues"""
-    leagues = db.query(SleeperLeague).all()
-    return [
-        SleeperLeagueStats(
-            league_id=league.league_id,
-            league_name=league.league_name or "Unknown League",
-            season=league.season,
-            total_rosters=league.total_rosters or 0,
-            last_synced=league.last_synced.strftime("%Y-%m-%d %H:%M") if league.last_synced else "Never"
-        ) for league in leagues
-    ]
+    leagues = db.query(League).all()
+    result = []
+    for league in leagues:
+        try:
+            league_stats = SleeperLeagueStats(
+                league_id=str(league.league_id) if league.league_id else "",
+                league_name=str(league.league_name) if league.league_name else "Unknown League",
+                season=str(league.season) if league.season else "2024",
+                total_rosters=int(league.total_teams) if league.total_teams is not None else 0,
+                last_synced=league.updated_at.strftime("%Y-%m-%d %H:%M") if league.updated_at else "Never"
+            )
+            result.append(league_stats)
+        except Exception as e:
+            logger.error(f"Failed to serialize league {league.league_id}: {e}")
+            # Skip this league and continue
+            continue
+
+    return result
 
 @router.get("/top-players", response_model=List[TopPlayer])
 async def get_top_players(
@@ -136,9 +146,9 @@ async def get_roster_dashboard(
             league_id = settings.sleeper_league_id
         
         # Get roster data from database
-        roster = db.query(SleeperRoster).filter(
-            SleeperRoster.league_id == league_id,
-            SleeperRoster.owner_id == owner_id
+        roster = db.query(Roster).filter(
+            Roster.league_id == league_id,
+            Roster.owner_id == owner_id
         ).first()
 
         if not roster:
@@ -192,12 +202,12 @@ async def get_roster_dashboard(
             }
         
         # Get player details for all roster players
-        roster_players = db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id.in_(all_player_ids)
+        roster_players = db.query(Player).filter(
+            Player.player_id.in_(all_player_ids)
         ).all()
         
         # Create mapping of sleeper_id -> player for quick lookup
-        player_map = {p.sleeper_player_id: p for p in roster_players}
+        player_map = {p.player_id: p for p in roster_players}
         
         # Get projections for the week/season
         aggregation_service = ProjectionAggregationService(db)
@@ -206,22 +216,22 @@ async def get_roster_dashboard(
             season=season
         )
         
-        # Get league scoring settings for accurate calculations
-        from app.models.sleeper import SleeperLeague
-        league_data = db.query(SleeperLeague).filter(SleeperLeague.league_id == league_id).first()
-        scoring_settings = league_data.scoring_settings if league_data else {}
+        # Initialize league scoring service for accurate calculations
+        from app.services.league_scoring_service import LeagueScoringService
+        league_scoring_service = LeagueScoringService(db)
 
         # Use shared scoring utility for consistent calculations
 
         # Get actual stats if requested and we have a specific week
         stats_map = {}
         if include_stats and week:
-            stats_query = db.query(SleeperPlayerStats).filter(
-                SleeperPlayerStats.sleeper_player_id.in_(all_player_ids),
-                SleeperPlayerStats.week == week,
-                SleeperPlayerStats.season == season
+            stats_query = db.query(PlayerStats).filter(
+                PlayerStats.player_id.in_(all_player_ids),
+                PlayerStats.week == week,
+                PlayerStats.season == season,
+                PlayerStats.stat_type == 'actual'
             ).all()
-            stats_map = {s.sleeper_player_id: s for s in stats_query}
+            stats_map = {s.player_id: s for s in stats_query}
         
         # Build comprehensive player data
         async def build_player_dashboard_data(sleeper_id: str, is_starter: bool = False):
@@ -270,27 +280,52 @@ async def get_roster_dashboard(
             # Add projections data
             consensus = consensus_projections.get(sleeper_id)
             if consensus:
-                fantasy_points = consensus.consensus_projections.get('fantasy_points', 0)
+                # Use unified stat mapping service for consistent handling
+                from app.services.stat_mapping_service import StatType
+                consensus_stats = consensus.consensus_projections
+
+                # Calculate league-specific fantasy points using league scoring service
+                scoring_settings = league_scoring_service.get_league_scoring_settings(league_id)
+                league_fantasy_points = calculate_fantasy_points(
+                    consensus_stats,
+                    scoring_settings,
+                    player.position,
+                    StatType.CONSENSUS_PROJECTIONS
+                )
+
                 player_data['projections'] = {
-                    'fantasy_points': round(fantasy_points, 2),
+                    'fantasy_points': round(league_fantasy_points.get('half_ppr', 0), 2),
+                    'fantasy_points_standard': round(league_fantasy_points.get('standard', 0), 2),
+                    'fantasy_points_ppr': round(league_fantasy_points.get('ppr', 0), 2),
                     'passing': {
-                        'yards': round(consensus.consensus_projections.get('passing_yards', 0), 2),
-                        'touchdowns': round(consensus.consensus_projections.get('passing_tds', 0), 2),
-                        'interceptions': round(consensus.consensus_projections.get('passing_ints', 0), 2)
+                        'yards': round(consensus_stats.get('passing_yards', 0), 2),
+                        'touchdowns': round(consensus_stats.get('passing_tds', 0), 2),
+                        'interceptions': round(consensus_stats.get('passing_interceptions', 0), 2)
                     },
                     'rushing': {
-                        'yards': round(consensus.consensus_projections.get('rushing_yards', 0), 2),
-                        'touchdowns': round(consensus.consensus_projections.get('rushing_tds', 0), 2)
+                        'yards': round(consensus_stats.get('rushing_yards', 0), 2),
+                        'touchdowns': round(consensus_stats.get('rushing_tds', 0), 2)
                     },
                     'receiving': {
-                        'yards': round(consensus.consensus_projections.get('receiving_yards', 0), 2),
-                        'touchdowns': round(consensus.consensus_projections.get('receiving_tds', 0), 2),
-                        'receptions': round(consensus.consensus_projections.get('receptions', 0), 2)
+                        'yards': round(consensus_stats.get('receiving_yards', 0), 2),
+                        'touchdowns': round(consensus_stats.get('receiving_tds', 0), 2),
+                        'receptions': round(consensus_stats.get('receptions', 0), 2)
+                    },
+                    'kicking': {
+                        'field_goals_made': round(consensus_stats.get('field_goals_made', 0), 2),
+                        'extra_points_made': round(consensus_stats.get('extra_points_made', 0), 2)
+                    },
+                    'defense': {
+                        'sacks': round(consensus_stats.get('sacks', 0), 2),
+                        'interceptions': round(consensus_stats.get('interceptions', 0), 2),
+                        'fumble_recoveries': round(consensus_stats.get('fumble_recoveries', 0), 2),
+                        'defensive_tds': round(consensus_stats.get('defensive_tds', 0), 2)
                     },
                     'meta': {
                         'provider_count': consensus.provider_count,
                         'confidence_score': round(consensus.total_weight, 2),
-                        'last_updated': datetime.now().isoformat()
+                        'last_updated': datetime.now().isoformat(),
+                        'league_scoring_applied': True
                     }
                 }
             else:
@@ -300,8 +335,24 @@ async def get_roster_dashboard(
             if include_stats and week:
                 stats = stats_map.get(sleeper_id)
                 if stats:
-                    # Calculate fantasy points using shared scoring utility
-                    league_fantasy_points = calculate_fantasy_points(stats, scoring_settings, player.position)
+                    # Calculate and store league-specific fantasy points
+                    fantasy_points_value = league_scoring_service.calculate_and_store_fantasy_points(
+                        league_id=league_id,
+                        stat_id=stats.stat_id,
+                        player_stats=stats
+                    )
+
+                    # Get stored calculation with breakdown
+                    stored_calculation = league_scoring_service.get_stored_fantasy_points(
+                        league_id=league_id,
+                        stat_id=stats.stat_id
+                    )
+
+                    league_fantasy_points = stored_calculation['scoring_breakdown']['scoring_formats'] if stored_calculation else {
+                        'ppr': fantasy_points_value or 0,
+                        'standard': fantasy_points_value or 0,
+                        'half_ppr': fantasy_points_value or 0
+                    }
                     
                     player_data['actual_stats'] = {
                         'fantasy_points': league_fantasy_points,
@@ -506,7 +557,9 @@ async def get_roster_dashboard(
                         'player_photos': include_photos
                     },
                     'generated_at': datetime.now().isoformat(),
-                    'last_roster_sync': roster.last_synced.isoformat() if roster.last_synced else None
+                    'last_roster_sync': roster.updated_at.isoformat() if roster.updated_at else None,
+                    'league_scoring_applied': True,
+                    'fantasy_points_stored': include_stats and week is not None
                 }
             }
         }
@@ -575,4 +628,68 @@ async def get_fantasy_week_state():
         
     except Exception as e:
         logger.error(f"Failed to get fantasy week state: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.post("/calculate-fantasy-points/{league_id}")
+async def calculate_league_fantasy_points(
+    league_id: str,
+    week: int = Query(..., description="NFL week number"),
+    season: str = Query(settings.default_season, description="NFL season"),
+    stat_type: str = Query('actual', description="Stat type: 'actual' or 'projection'"),
+    force_recalculate: bool = Query(False, description="Force recalculation of existing values"),
+    db: Session = Depends(get_db)
+):
+    """Calculate and store league-specific fantasy points for all players in a week"""
+    try:
+        from app.services.league_scoring_service import LeagueScoringService
+
+        league_scoring_service = LeagueScoringService(db)
+
+        # Perform bulk calculation
+        results = league_scoring_service.bulk_calculate_fantasy_points(
+            league_id=league_id,
+            week=week,
+            season=season,
+            stat_type=stat_type
+        )
+
+        if not results:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {stat_type} stats found for week {week}, season {season}"
+            )
+
+        # Get summary statistics
+        total_players = len(results)
+        total_points = sum(results.values())
+        avg_points = total_points / total_players if total_players > 0 else 0
+        max_points = max(results.values()) if results else 0
+        min_points = min(results.values()) if results else 0
+
+        return {
+            'success': True,
+            'league_id': league_id,
+            'week': week,
+            'season': season,
+            'stat_type': stat_type,
+            'summary': {
+                'total_players_calculated': total_players,
+                'total_fantasy_points': round(total_points, 2),
+                'average_fantasy_points': round(avg_points, 2),
+                'max_fantasy_points': round(max_points, 2),
+                'min_fantasy_points': round(min_points, 2)
+            },
+            'player_results': {
+                player_id: round(points, 2)
+                for player_id, points in sorted(results.items(), key=lambda x: x[1], reverse=True)
+            },
+            'metadata': {
+                'calculated_at': datetime.now().isoformat(),
+                'force_recalculated': force_recalculate,
+                'stored_in_fantasy_point_calculations': True
+            }
+        }
+
+    except Exception as e:
+        logger.error(f"Failed to calculate fantasy points for league {league_id}, week {week}: {e}")
         raise HTTPException(status_code=500, detail=str(e))

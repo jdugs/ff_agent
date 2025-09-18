@@ -4,7 +4,7 @@ from typing import Optional
 from app.database import get_db
 from app.services.projection_service import ProjectionService
 from app.services.projection_sources import ProviderManager
-from app.models.sleeper import SleeperPlayer
+from app.models.players import Player
 from app.config import settings
 from pydantic import BaseModel
 import logging
@@ -189,14 +189,14 @@ async def test_player_mapping(
             
             if sleeper_id:
                 # Get Sleeper player details
-                sleeper_player = db.query(SleeperPlayer).filter(
-                    SleeperPlayer.sleeper_player_id == sleeper_id
+                player = db.query(Player).filter(
+                    Player.player_id == sleeper_id
                 ).first()
-                if sleeper_player:
+                if player:
                     match_info['sleeper_player'] = {
-                        'name': sleeper_player.full_name,
-                        'team': sleeper_player.team,
-                        'position': sleeper_player.position
+                        'name': player.full_name,
+                        'team': player.team,
+                        'position': player.position
                     }
             
             example_matches.append(match_info)
@@ -353,10 +353,15 @@ async def save_fantasypros_projections(
             week=week,
             season=season
         )
-        
+
+        # Invalidate consensus projection cache since we have new data
+        from app.services.projection_aggregation_service import ProjectionAggregationService
+        aggregation_service = ProjectionAggregationService(db)
+        aggregation_service.invalidate_cache(week=week, season=season)
+
         # Cleanup
         await projection_service.close()
-        
+
         return {
             'message': f"FantasyPros projections saved for {'week ' + str(week) if week else 'season'} {season}",
             'results': results

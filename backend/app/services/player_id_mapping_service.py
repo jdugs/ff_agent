@@ -1,7 +1,7 @@
 from typing import Dict, Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.models.sleeper import SleeperPlayer
+from app.models.players import Player
 import logging
 import difflib
 
@@ -70,16 +70,16 @@ class PlayerIDMappingService:
     def __init__(self, db: Session):
         self.db = db
     
-    def get_player_by_external_id(self, source_name: str, external_id: str) -> Optional[SleeperPlayer]:
+    def get_player_by_external_id(self, source_name: str, external_id: str) -> Optional[Player]:
         """Find a player by their external ID from a specific source"""
         
         # Map source names to database columns
         source_column_map = {
-            'espn': SleeperPlayer.espn_id,
-            'rotowire': SleeperPlayer.rotowire_id,
-            'fantasy_data': SleeperPlayer.fantasy_data_id,
-            'yahoo': SleeperPlayer.yahoo_id,
-            'stats': SleeperPlayer.stats_id
+            'espn': Player.espn_id,
+            'rotowire': Player.rotowire_id,
+            'fantasy_data': Player.fantasy_data_id,
+            'yahoo': Player.yahoo_id,
+            'stats': Player.stats_id
         }
         
         column = source_column_map.get(source_name.lower())
@@ -87,13 +87,13 @@ class PlayerIDMappingService:
             logger.warning(f"Unknown source: {source_name}")
             return None
         
-        return self.db.query(SleeperPlayer).filter(column == external_id).first()
+        return self.db.query(Player).filter(column == external_id).first()
     
     def get_external_id(self, sleeper_player_id: str, source_name: str) -> Optional[str]:
         """Get a player's external ID for a specific source"""
         
-        player = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_player_id
+        player = self.db.query(Player).filter(
+            Player.player_id == sleeper_player_id
         ).first()
         
         if not player:
@@ -118,8 +118,8 @@ class PlayerIDMappingService:
     def get_all_external_ids(self, sleeper_player_id: str) -> Dict[str, Optional[str]]:
         """Get all external IDs for a player"""
         
-        player = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_player_id
+        player = self.db.query(Player).filter(
+            Player.player_id == sleeper_player_id
         ).first()
         
         if not player:
@@ -131,18 +131,18 @@ class PlayerIDMappingService:
             'fantasy_data': player.fantasy_data_id,
             'yahoo': player.yahoo_id,
             'stats': player.stats_id,
-            'sleeper': player.sleeper_player_id
+            'sleeper': player.player_id
         }
     
-    def find_players_with_external_id(self, source_name: str) -> List[SleeperPlayer]:
+    def find_players_with_external_id(self, source_name: str) -> List[Player]:
         """Find all players that have an external ID for a specific source"""
         
         source_column_map = {
-            'espn': SleeperPlayer.espn_id,
-            'rotowire': SleeperPlayer.rotowire_id,
-            'fantasy_data': SleeperPlayer.fantasy_data_id,
-            'yahoo': SleeperPlayer.yahoo_id,
-            'stats': SleeperPlayer.stats_id
+            'espn': Player.espn_id,
+            'rotowire': Player.rotowire_id,
+            'fantasy_data': Player.fantasy_data_id,
+            'yahoo': Player.yahoo_id,
+            'stats': Player.stats_id
         }
         
         column = source_column_map.get(source_name.lower())
@@ -150,20 +150,20 @@ class PlayerIDMappingService:
             logger.warning(f"Unknown source: {source_name}")
             return []
         
-        return self.db.query(SleeperPlayer).filter(column.isnot(None)).all()
+        return self.db.query(Player).filter(column.isnot(None)).all()
     
     def get_mapping_coverage_stats(self) -> Dict[str, int]:
         """Get statistics on external ID coverage"""
         
-        total_players = self.db.query(SleeperPlayer).count()
+        total_players = self.db.query(Player).count()
         
         stats = {
             'total_players': total_players,
-            'espn_coverage': self.db.query(SleeperPlayer).filter(SleeperPlayer.espn_id.isnot(None)).count(),
-            'rotowire_coverage': self.db.query(SleeperPlayer).filter(SleeperPlayer.rotowire_id.isnot(None)).count(),
-            'fantasy_data_coverage': self.db.query(SleeperPlayer).filter(SleeperPlayer.fantasy_data_id.isnot(None)).count(),
-            'yahoo_coverage': self.db.query(SleeperPlayer).filter(SleeperPlayer.yahoo_id.isnot(None)).count(),
-            'stats_coverage': self.db.query(SleeperPlayer).filter(SleeperPlayer.stats_id.isnot(None)).count()
+            'espn_coverage': self.db.query(Player).filter(Player.espn_id.isnot(None)).count(),
+            'rotowire_coverage': self.db.query(Player).filter(Player.rotowire_id.isnot(None)).count(),
+            'fantasy_data_coverage': self.db.query(Player).filter(Player.fantasy_data_id.isnot(None)).count(),
+            'yahoo_coverage': self.db.query(Player).filter(Player.yahoo_id.isnot(None)).count(),
+            'stats_coverage': self.db.query(Player).filter(Player.stats_id.isnot(None)).count()
         }
         
         # Calculate percentages
@@ -177,8 +177,8 @@ class PlayerIDMappingService:
     def update_external_id(self, sleeper_player_id: str, source_name: str, external_id: str) -> bool:
         """Update a player's external ID for a specific source"""
         
-        player = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_player_id
+        player = self.db.query(Player).filter(
+            Player.player_id == sleeper_player_id
         ).first()
         
         if not player:
@@ -209,7 +209,7 @@ class PlayerIDMappingService:
             self.db.rollback()
             return False
     
-    def find_fantasypros_player_match(self, fp_player: Dict) -> Optional[SleeperPlayer]:
+    def find_fantasypros_player_match(self, fp_player: Dict) -> Optional[Player]:
         """
         Find matching Sleeper player for a FantasyPros player
         Uses multiple matching strategies in order of reliability
@@ -232,46 +232,46 @@ class PlayerIDMappingService:
         # Strategy 1: Exact name and team match
         exact_match = self._find_exact_name_team_match(fp_name, fp_team, fp_position)
         if exact_match:
-            logger.debug(f"Exact match found for {fp_name}: {exact_match.sleeper_player_id}")
+            logger.debug(f"Exact match found for {fp_name}: {exact_match.player_id}")
             return exact_match
         
         # Strategy 2: Name variations (handle common differences)
         name_match = self._find_name_variation_match(fp_name, fp_team, fp_position)
         if name_match:
-            logger.debug(f"Name variation match found for {fp_name}: {name_match.sleeper_player_id}")
+            logger.debug(f"Name variation match found for {fp_name}: {name_match.player_id}")
             return name_match
         
         # Strategy 3: Fuzzy name matching (for similar names)
         fuzzy_match = self._find_fuzzy_name_match(fp_name, fp_team, fp_position)
         if fuzzy_match:
-            logger.debug(f"Fuzzy match found for {fp_name}: {fuzzy_match.sleeper_player_id}")
+            logger.debug(f"Fuzzy match found for {fp_name}: {fuzzy_match.player_id}")
             return fuzzy_match
         
         # Strategy 4: Fallback - try matching without team (name + position only)
         if fp_team:  # Only if we had a team to begin with
             fallback_match = self._find_exact_name_team_match(fp_name, None, fp_position)
             if fallback_match:
-                logger.debug(f"Fallback match found for {fp_name} (ignoring team): {fallback_match.sleeper_player_id}")
+                logger.debug(f"Fallback match found for {fp_name} (ignoring team): {fallback_match.player_id}")
                 return fallback_match
         
         logger.warning(f"No match found for FantasyPros player: {fp_name} ({fp_team_raw}->{fp_team} {fp_position})")
         return None
     
-    def _find_exact_name_team_match(self, name: str, team: Optional[str], position: str) -> Optional[SleeperPlayer]:
+    def _find_exact_name_team_match(self, name: str, team: Optional[str], position: str) -> Optional[Player]:
         """Find player by exact name and team match"""
-        query = self.db.query(SleeperPlayer).filter(
-            func.lower(SleeperPlayer.full_name) == func.lower(name)
+        query = self.db.query(Player).filter(
+            func.lower(Player.full_name) == func.lower(name)
         )
         
         if team:
-            query = query.filter(func.upper(SleeperPlayer.team) == team.upper())
+            query = query.filter(func.upper(Player.team) == team.upper())
         
         if position:
-            query = query.filter(func.upper(SleeperPlayer.position) == position.upper())
+            query = query.filter(func.upper(Player.position) == position.upper())
         
         return query.first()
     
-    def _find_defense_match(self, fp_name: str, fp_team: str) -> Optional[SleeperPlayer]:
+    def _find_defense_match(self, fp_name: str, fp_team: str) -> Optional[Player]:
         """Find defense match using team name mappings"""
         
         # Map FantasyPros full team name to Sleeper team abbreviation
@@ -282,9 +282,9 @@ class PlayerIDMappingService:
             return None
         
         # Find defense in Sleeper database
-        defense = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_team,
-            SleeperPlayer.position == 'DEF'
+        defense = self.db.query(Player).filter(
+            Player.player_id == sleeper_team,
+            Player.position == 'DEF'
         ).first()
         
         if defense:
@@ -294,7 +294,7 @@ class PlayerIDMappingService:
             logger.warning(f"Defense not found in database: {sleeper_team}")
             return None
     
-    def _find_name_variation_match(self, name: str, team: str, position: str) -> Optional[SleeperPlayer]:
+    def _find_name_variation_match(self, name: str, team: str, position: str) -> Optional[Player]:
         """Find player by handling common name variations"""
         
         # Handle common name variations
@@ -325,17 +325,17 @@ class PlayerIDMappingService:
         
         return None
     
-    def _find_fuzzy_name_match(self, name: str, team: str, position: str, threshold: float = 0.8) -> Optional[SleeperPlayer]:
+    def _find_fuzzy_name_match(self, name: str, team: str, position: str, threshold: float = 0.8) -> Optional[Player]:
         """Find player using fuzzy string matching"""
         
         # Get candidates (same team and position if available)
-        query = self.db.query(SleeperPlayer)
+        query = self.db.query(Player)
         
         if team:
-            query = query.filter(func.upper(SleeperPlayer.team) == team)
+            query = query.filter(func.upper(Player.team) == team)
         
         if position:
-            query = query.filter(func.upper(SleeperPlayer.position) == position)
+            query = query.filter(func.upper(Player.position) == position)
         
         candidates = query.all()
         
@@ -371,7 +371,7 @@ class PlayerIDMappingService:
             sleeper_player = self.find_fantasypros_player_match(fp_player)
             
             if sleeper_player:
-                mapping[fp_key] = sleeper_player.sleeper_player_id
+                mapping[fp_key] = sleeper_player.player_id
                 matched_count += 1
         
         match_percentage = (matched_count / len(fp_players) * 100) if fp_players else 0

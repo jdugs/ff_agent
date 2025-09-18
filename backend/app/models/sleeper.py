@@ -1,86 +1,63 @@
-from sqlalchemy import Column, String, Integer, Enum, DECIMAL, DateTime, JSON, BigInteger, ForeignKey
+from sqlalchemy import Column, String, Integer, Enum, DECIMAL, DateTime, JSON, BigInteger, ForeignKey, Index
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from .base import Base, TimestampMixin
 
-class SleeperLeague(Base, TimestampMixin):
-    __tablename__ = "sleeper_leagues"
-    
-    league_id = Column(String(50), primary_key=True)
-    user_id = Column(String(50), nullable=False, index=True)
-    sleeper_user_id = Column(String(50), nullable=False)
-    league_name = Column(String(100))
-    season = Column(String(10), nullable=False, index=True)
-    status = Column(Enum('pre_draft', 'drafting', 'in_season', 'complete', name='league_status'), default='in_season')
-    sport = Column(String(20), default='nfl')
-    settings = Column(JSON)
-    scoring_settings = Column(JSON)
-    roster_positions = Column(JSON)
-    total_rosters = Column(Integer)
-    draft_id = Column(String(50))
-    previous_league_id = Column(String(50))
-    last_synced = Column(DateTime, default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    rosters = relationship("SleeperRoster", back_populates="league")
-    matchups = relationship("SleeperMatchup", back_populates="league")
+# SleeperLeague has been migrated to the generic League model in leagues.py
+# This model is commented out to prevent conflicts during startup
+# TODO: Remove all references to SleeperLeague and use League instead
 
-class SleeperRoster(Base, TimestampMixin):
-    __tablename__ = "sleeper_rosters"
-    
-    roster_id = Column(Integer, nullable=False, primary_key=True)
-    league_id = Column(String(50), ForeignKey('sleeper_leagues.league_id'), nullable=False, primary_key=True, index=True)
-    owner_id = Column(String(50), index=True)
-    player_ids = Column(JSON)
-    starters = Column(JSON)
-    reserve = Column(JSON)
-    taxi = Column(JSON)
-    settings = Column(JSON)
-    wins = Column(Integer, default=0)
-    losses = Column(Integer, default=0)
-    ties = Column(Integer, default=0)
-    fpts = Column(DECIMAL(6, 2), default=0)
-    fpts_against = Column(DECIMAL(6, 2), default=0)
-    last_synced = Column(DateTime, default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    league = relationship("SleeperLeague", back_populates="rosters")
+# class SleeperLeague(Base, TimestampMixin):
+#     __tablename__ = "sleeper_leagues"
+#
+#     league_id = Column(String(50), primary_key=True)
+#     user_id = Column(String(50), nullable=False, index=True)
+#     sleeper_user_id = Column(String(50), nullable=False)
+#     league_name = Column(String(100))
+#     season = Column(String(10), nullable=False, index=True)
+#     status = Column(Enum('pre_draft', 'drafting', 'in_season', 'complete', name='league_status'), default='in_season')
+#     sport = Column(String(20), default='nfl')
+#     settings = Column(JSON)
+#     scoring_settings = Column(JSON)
+#     roster_positions = Column(JSON)
+#     total_rosters = Column(Integer)
+#     draft_id = Column(String(50))
+#     previous_league_id = Column(String(50))
+#     last_synced = Column(DateTime, default=func.now(), onupdate=func.now())
+#
+#     # Relationships
+#     rosters = relationship("SleeperRoster", back_populates="league")
+#     matchups = relationship("SleeperMatchup", back_populates="league")
 
-class SleeperPlayer(Base, TimestampMixin):
-    __tablename__ = "sleeper_players"
-    
-    sleeper_player_id = Column(String(50), primary_key=True)
-    player_id = Column(String(50), ForeignKey('players.player_id'), index=True)  # Link to our players table
-    full_name = Column(String(100), index=True)
-    first_name = Column(String(50))
-    last_name = Column(String(50))
-    position = Column(String(10), index=True)
-    team = Column(String(10), index=True)
-    age = Column(Integer)
-    height = Column(String(10))
-    weight = Column(String(10))
-    college = Column(String(100))
-    years_exp = Column(Integer)
-    status = Column(Enum('Active', 'Inactive', 'Injured Reserve', 'Reserve/PUP', name='player_status'), default='Active')
-    fantasy_positions = Column(JSON)
-    
-    # External IDs for multi-source integration
-    espn_id = Column(String(50), index=True)
-    rotowire_id = Column(String(50), index=True)
-    fantasy_data_id = Column(String(50), index=True)
-    yahoo_id = Column(String(50), index=True)
-    stats_id = Column(String(50), index=True)  # For stats.com or similar
-    
-    last_updated = Column(DateTime, default=func.now(), onupdate=func.now())
-    
-    # Relationships
-    player = relationship("Player")
+# SleeperRoster has been migrated to the generic Roster model in rosters.py
+# This model is commented out to prevent conflicts during startup
+
+# class SleeperRoster(Base, TimestampMixin):
+#     __tablename__ = "sleeper_rosters"
+#
+#     roster_id = Column(Integer, nullable=False, primary_key=True)
+#     league_id = Column(String(50), ForeignKey('sleeper_leagues.league_id'), nullable=False, primary_key=True, index=True)
+#     owner_id = Column(String(50), index=True)
+#     player_ids = Column(JSON)
+#     starters = Column(JSON)
+#     reserve = Column(JSON)
+#     taxi = Column(JSON)
+#     settings = Column(JSON)
+#     wins = Column(Integer, default=0)
+#     losses = Column(Integer, default=0)
+#     ties = Column(Integer, default=0)
+#     fpts = Column(DECIMAL(6, 2), default=0)
+#     fpts_against = Column(DECIMAL(6, 2), default=0)
+#     last_synced = Column(DateTime, default=func.now(), onupdate=func.now())
+#
+#     # Relationships
+#     league = relationship("SleeperLeague", back_populates="rosters")
 
 class SleeperMatchup(Base, TimestampMixin):
     __tablename__ = "sleeper_matchups"
     
     matchup_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    league_id = Column(String(50), ForeignKey('sleeper_leagues.league_id'), nullable=False, index=True)
+    league_id = Column(String(50), ForeignKey('leagues.league_id'), nullable=False, index=True)
     week = Column(Integer, nullable=False, index=True)
     roster_id = Column(Integer, nullable=False, index=True)
     matchup_id_sleeper = Column(Integer)
@@ -93,15 +70,19 @@ class SleeperMatchup(Base, TimestampMixin):
     custom_points = Column(JSON)
     
     # Relationships
-    league = relationship("SleeperLeague", back_populates="matchups")
+    league = relationship("League", back_populates="matchups")
 
-class SleeperPlayerStats(Base, TimestampMixin):
-    __tablename__ = "sleeper_player_stats"
-    
+class PlayerStats(Base, TimestampMixin):
+    __tablename__ = "player_stats"
+
     stat_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    sleeper_player_id = Column(String(50), ForeignKey('sleeper_players.sleeper_player_id'), nullable=False, index=True)
+    player_id = Column(String(50), ForeignKey('players.player_id'), nullable=False, index=True)
     week = Column(Integer, nullable=False, index=True)
     season = Column(String(10), nullable=False, index=True)
+
+    # New fields for consolidation
+    stat_type = Column(Enum('actual', 'projection', name='stat_type'), nullable=False, index=True)
+    source_id = Column(Integer, ForeignKey('sources.source_id'), nullable=False, index=True)
     
     # Fantasy points
     fantasy_points_ppr = Column(DECIMAL(5, 2))
@@ -219,15 +200,24 @@ class SleeperPlayerStats(Base, TimestampMixin):
     
     # Raw stats from Sleeper
     raw_stats = Column(JSON)
-    
+
     # Relationships
-    player = relationship("SleeperPlayer")
+    player = relationship("Player")
+    source = relationship("Source")
+    fantasy_point_calculations = relationship("FantasyPointCalculation", back_populates="player_stat")
+
+    # Indexes for performance
+    __table_args__ = (
+        Index('ix_player_stats_player_week_season', 'player_id', 'week', 'season'),
+        Index('ix_player_stats_type_source', 'stat_type', 'source_id'),
+        Index('ix_player_stats_season_type', 'season', 'stat_type'),
+    )
 
 class SleeperPlayerProjections(Base, TimestampMixin):
     __tablename__ = "sleeper_player_projections"
     
     projection_id = Column(BigInteger, primary_key=True, autoincrement=True)
-    sleeper_player_id = Column(String(50), ForeignKey('sleeper_players.sleeper_player_id'), nullable=False, index=True)
+    sleeper_player_id = Column(String(50), ForeignKey('players.player_id'), nullable=False, index=True)
     week = Column(Integer, nullable=False, index=True)
     season = Column(String(10), nullable=False, index=True)
     
@@ -249,4 +239,4 @@ class SleeperPlayerProjections(Base, TimestampMixin):
     raw_projections = Column(JSON)
     
     # Relationships
-    player = relationship("SleeperPlayer")
+    player = relationship("Player")

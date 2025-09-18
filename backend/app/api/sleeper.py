@@ -5,7 +5,9 @@ from app.config import settings
 from app.database import get_db
 from app.services.sleeper_service import SleeperService
 from app.services.nfl_schedule_service import NFLScheduleService
-from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer
+from app.models.leagues import League
+from app.models.rosters import Roster
+from app.models.players import Player
 from pydantic import BaseModel
 import logging
 
@@ -91,8 +93,26 @@ async def sync_user_leagues(
 @router.get("/user/{user_id}/leagues", response_model=List[LeagueResponse])
 async def get_user_leagues(user_id: str, db: Session = Depends(get_db)):
     """Get all synced leagues for a user"""
-    leagues = db.query(SleeperLeague).filter(SleeperLeague.user_id == user_id).all()
-    return leagues
+    leagues = db.query(League).filter(League.user_id == user_id).all()
+
+    result = []
+    for league in leagues:
+        try:
+            league_response = LeagueResponse(
+                league_id=str(league.league_id) if league.league_id else "",
+                league_name=str(league.league_name) if league.league_name else "Unknown League",
+                season=str(league.season) if league.season else "2024",
+                status=str(league.status) if league.status else "in_season",
+                total_rosters=int(league.total_teams) if league.total_teams is not None else 0,
+                scoring_settings=league.scoring_settings,
+                roster_positions=league.roster_positions
+            )
+            result.append(league_response)
+        except Exception as e:
+            logger.error(f"Failed to serialize league {league.league_id}: {e}")
+            continue
+
+    return result
 
 @router.post("/league/{league_id}/sync")
 async def sync_league(
@@ -117,7 +137,7 @@ async def sync_league(
 @router.get("/league/{league_id}", response_model=LeagueResponse)
 async def get_league(league_id: str, db: Session = Depends(get_db)):
     """Get league information"""
-    league = db.query(SleeperLeague).filter(SleeperLeague.league_id == league_id).first()
+    league = db.query(League).filter(League.league_id == league_id).first()
     if not league:
         raise HTTPException(status_code=404, detail="League not found")
     return league
@@ -127,23 +147,23 @@ async def get_league_rosters(league_id: str, db: Session = Depends(get_db)):
     """Get all rosters in a league with player details"""
     service = SleeperService(db)
     
-    rosters = db.query(SleeperRoster).filter(SleeperRoster.league_id == league_id).all()
+    rosters = db.query(Roster).filter(Roster.league_id == league_id).all()
     
     result = []
     for roster in rosters:
         # Get player details
         players = []
         if roster.player_ids:
-            player_details = service.player_mapper.get_sleeper_players_for_roster(roster.player_ids)
+            player_details = service.player_mapper.get_players_for_roster(roster.player_ids)
             starters = roster.starters or []
             
             for player_detail in player_details:
-                sleeper_player = player_detail['sleeper_player']
+                player = player_detail['player']
                 players.append(RosterPlayerResponse(
                     sleeper_id=player_detail['sleeper_id'],
-                    name=sleeper_player.full_name if sleeper_player else None,
-                    position=sleeper_player.position if sleeper_player else None,
-                    team=sleeper_player.team if sleeper_player else None,
+                    name=player.full_name if player else None,
+                    position=player.position if player else None,
+                    team=player.team if player else None,
                     is_starter=player_detail['sleeper_id'] in starters
                 ))
         
@@ -167,18 +187,18 @@ async def get_my_roster(
 ):
     """Get the current user's roster in a league"""
     # First find the league to verify user is in it
-    league = db.query(SleeperLeague).filter(
-        SleeperLeague.league_id == league_id,
-        SleeperLeague.user_id == user_id
+    league = db.query(League).filter(
+        League.league_id == league_id,
+        League.user_id == user_id
     ).first()
-    
+
     if not league:
         raise HTTPException(status_code=404, detail="League not found or user not in league")
-    
+
     # Find user's roster
-    roster = db.query(SleeperRoster).filter(
-        SleeperRoster.league_id == league_id,
-        SleeperRoster.owner_id == user_id
+    roster = db.query(Roster).filter(
+        Roster.league_id == league_id,
+        Roster.owner_id == user_id
     ).first()
     
     if not roster:
@@ -188,18 +208,18 @@ async def get_my_roster(
     service = SleeperService(db)
     players = []
     if roster.player_ids:
-        player_details = service.player_mapper.get_sleeper_players_for_roster(roster.player_ids)
+        player_details = service.player_mapper.get_players_for_roster(roster.player_ids)
         starters = roster.starters or []
         
         for player_detail in player_details:
-            sleeper_player = player_detail['sleeper_player']
+            player = player_detail['player']
             our_player = player_detail['our_player']
             
             players.append({
                 'sleeper_id': player_detail['sleeper_id'],
-                'name': sleeper_player.full_name if sleeper_player else None,
-                'position': sleeper_player.position if sleeper_player else None,
-                'team': sleeper_player.team if sleeper_player else None,
+                'name': player.full_name if player else None,
+                'position': player.position if player else None,
+                'team': player.team if player else None,
                 'is_starter': player_detail['sleeper_id'] in starters,
                 'our_player_id': our_player.player_id if our_player else None,
                 'has_rankings': our_player is not None
@@ -242,9 +262,9 @@ async def get_available_seasons():
 @router.get("/user/{user_id}/leagues/all-seasons")
 async def get_user_leagues_all_seasons(user_id: str, db: Session = Depends(get_db)):
     """Get all synced leagues for a user across all seasons"""
-    leagues = db.query(SleeperLeague).filter(
-        SleeperLeague.user_id == user_id
-    ).order_by(SleeperLeague.season.desc()).all()
+    leagues = db.query(League).filter(
+        League.user_id == user_id
+    ).order_by(League.season.desc()).all()
     
     # Group by season
     by_season = {}
@@ -287,68 +307,34 @@ async def sync_all_seasons(
         "seasons": seasons
     }
 
-@router.post("/sync/stats/{week}")
-async def sync_player_stats(
-    week: int,
-    background_tasks: BackgroundTasks,
-    season: str = settings.default_season,
-    db: Session = Depends(get_db)
-):
-    """Sync player stats for a specific week"""
-    
-    async def sync_task():
-        service = SleeperService(db)
-        try:
-            count = await service.sync_player_stats(week, season)
-            return {"synced_stats": count}
-        finally:
-            await service.close()
-    
-    background_tasks.add_task(sync_task)
-    return {"message": f"Stats sync started for week {week}", "week": week}
+# Note: Stats and projections sync endpoints moved to /api/v1/player-data/
+# Use the new endpoints which have improved field mapping and scoring calculation:
+# - POST /api/v1/player-data/stats/sync/{week}
+# - POST /api/v1/player-data/projections/sync/{week}
+# - POST /api/v1/player-data/sync/all/{week}
 
-@router.post("/sync/projections/{week}")
-async def sync_player_projections(
-    week: int,
-    background_tasks: BackgroundTasks,
-    season: str = settings.default_season,
-    db: Session = Depends(get_db)
-):
-    """Sync player projections for a specific week"""
-    
-    async def sync_task():
-        service = SleeperService(db)
-        try:
-            count = await service.sync_player_projections(week, season)
-            return {"synced_projections": count}
-        finally:
-            await service.close()
-    
-    background_tasks.add_task(sync_task)
-    return {"message": f"Projections sync started for week {week}", "week": week}
-
-@router.get("/player/{player_id}/stats")
-async def get_player_stats(
-    player_id: str,
-    season: str = settings.default_season,
-    season_type: str = "regular",
-    db: Session = Depends(get_db)
-):
-    """Get individual player stats from Sleeper API"""
-    service = SleeperService(db)
-    try:
-        stats = await service.client.get_player_stats_individual(player_id, season, season_type)
-        if not stats:
-            raise HTTPException(status_code=404, detail="Player stats not found")
+# @router.get("/player/{player_id}/stats")
+# async def get_player_stats(
+#     player_id: str,
+#     season: str = settings.default_season,
+#     season_type: str = "regular",
+#     db: Session = Depends(get_db)
+# ):
+#     """Get individual player stats from Sleeper API"""
+#     service = SleeperService(db)
+#     try:
+#         stats = await service.client.get_player_stats_individual(player_id, season, season_type)
+#         if not stats:
+#             raise HTTPException(status_code=404, detail="Player stats not found")
         
-        return {
-            "player_id": player_id,
-            "season": season,
-            "season_type": season_type,
-            "stats": stats
-        }
-    finally:
-        await service.close()
+#         return {
+#             "player_id": player_id,
+#             "season": season,
+#             "season_type": season_type,
+#             "stats": stats
+#         }
+#     finally:
+#         await service.close()
 
 @router.get("/league/{league_id}/matchups/{week}")
 async def get_league_matchups(
@@ -394,12 +380,12 @@ async def get_my_matchup(
     """Get the current user's matchup for a specific week"""
     service = SleeperService(db)
     try:
-        from app.models.sleeper import SleeperMatchup, SleeperRoster
-        
+        from app.models.sleeper import SleeperMatchup
+
         # Find user's roster
-        my_roster = db.query(SleeperRoster).filter(
-            SleeperRoster.league_id == league_id,
-            SleeperRoster.owner_id == user_id
+        my_roster = db.query(Roster).filter(
+            Roster.league_id == league_id,
+            Roster.owner_id == user_id
         ).first()
         
         if not my_roster:
@@ -435,9 +421,9 @@ async def get_my_matchup(
         # Get opponent roster info
         opponent_roster = None
         if opponent_matchup:
-            opponent_roster = db.query(SleeperRoster).filter(
-                SleeperRoster.league_id == league_id,
-                SleeperRoster.roster_id == opponent_matchup.roster_id
+            opponent_roster = db.query(Roster).filter(
+                Roster.league_id == league_id,
+                Roster.roster_id == opponent_matchup.roster_id
             ).first()
         
         # Get projections using the same service as dashboard
@@ -452,8 +438,8 @@ async def get_my_matchup(
         my_players = []
         if my_matchup.starters:
             for sleeper_id in my_matchup.starters:
-                sleeper_player = db.query(SleeperPlayer).filter(
-                    SleeperPlayer.sleeper_player_id == sleeper_id
+                player = db.query(Player).filter(
+                    Player.player_id == sleeper_id
                 ).first()
 
                 # Get consensus projection
@@ -461,11 +447,12 @@ async def get_my_matchup(
                 fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
 
                 # Get actual stats for this week
-                from app.models.sleeper import SleeperPlayerStats
-                player_stats = db.query(SleeperPlayerStats).filter(
-                    SleeperPlayerStats.sleeper_player_id == sleeper_id,
-                    SleeperPlayerStats.week == week,
-                    SleeperPlayerStats.season == "2025"
+                from app.models.sleeper import PlayerStats
+                player_stats = db.query(PlayerStats).filter(
+                    PlayerStats.player_id == sleeper_id,
+                    PlayerStats.week == week,
+                    PlayerStats.season == "2025",
+                    PlayerStats.stat_type == 'actual'
                 ).first()
 
                 # Calculate actual fantasy points using league-specific scoring settings
@@ -481,13 +468,14 @@ async def get_my_matchup(
 
                 # Get game info for this player's team
                 schedule_service = NFLScheduleService(db)
-                opponent, game_time = schedule_service.get_opponent_and_time(sleeper_player.team or '', week)
+                team = player.team if player else ''
+                opponent, game_time = schedule_service.get_opponent_and_time(team, week)
 
                 my_players.append({
                     'sleeper_id': sleeper_id,
-                    'player_name': sleeper_player.full_name if sleeper_player else None,
-                    'position': sleeper_player.position if sleeper_player else None,
-                    'team': sleeper_player.team if sleeper_player else None,
+                    'player_name': player.full_name if player else None,
+                    'position': player.position if player else None,
+                    'team': player.team if player else None,
                     'opponent': opponent,
                     'game_time': game_time,
                     'projections': {
@@ -502,8 +490,8 @@ async def get_my_matchup(
         opponent_players = []
         if opponent_matchup and opponent_matchup.starters:
             for sleeper_id in opponent_matchup.starters:
-                sleeper_player = db.query(SleeperPlayer).filter(
-                    SleeperPlayer.sleeper_player_id == sleeper_id
+                player = db.query(Player).filter(
+                    Player.player_id == sleeper_id
                 ).first()
 
                 # Get consensus projection
@@ -511,10 +499,11 @@ async def get_my_matchup(
                 fantasy_points = consensus.consensus_projections.get('fantasy_points', 0) if consensus else 0
 
                 # Get actual stats for this week
-                player_stats = db.query(SleeperPlayerStats).filter(
-                    SleeperPlayerStats.sleeper_player_id == sleeper_id,
-                    SleeperPlayerStats.week == week,
-                    SleeperPlayerStats.season == "2025"
+                player_stats = db.query(PlayerStats).filter(
+                    PlayerStats.player_id == sleeper_id,
+                    PlayerStats.week == week,
+                    PlayerStats.season == "2025",
+                    PlayerStats.stat_type == 'actual'
                 ).first()
 
                 # Calculate actual fantasy points using league-specific scoring settings
@@ -530,13 +519,14 @@ async def get_my_matchup(
 
                 # Get game info for this player's team
                 schedule_service = NFLScheduleService(db)
-                opponent, game_time = schedule_service.get_opponent_and_time(sleeper_player.team or '', week)
+                team = player.team if player else ''
+                opponent, game_time = schedule_service.get_opponent_and_time(team, week)
 
                 opponent_players.append({
                     'sleeper_id': sleeper_id,
-                    'player_name': sleeper_player.full_name if sleeper_player else None,
-                    'position': sleeper_player.position if sleeper_player else None,
-                    'team': sleeper_player.team if sleeper_player else None,
+                    'player_name': player.full_name if player else None,
+                    'position': player.position if player else None,
+                    'team': player.team if player else None,
                     'opponent': opponent,
                     'game_time': game_time,
                     'projections': {

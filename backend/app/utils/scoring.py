@@ -35,20 +35,32 @@ def calculate_stat_points(stats, scoring_settings: Dict, stat_mapping: Dict) -> 
 
     return total_points
 
-def calculate_fantasy_points(stats, scoring_settings: Dict, player_position: Optional[str] = None) -> Dict[str, float]:
+def calculate_fantasy_points(
+    stats,
+    scoring_settings: Dict,
+    player_position: Optional[str] = None,
+    stat_type = None
+) -> Dict[str, float]:
     """
     Calculate fantasy points using league-specific scoring settings
 
     Args:
-        stats: Player stats object from database
+        stats: Player stats object (from database, projections, etc.)
         scoring_settings: League scoring configuration
         player_position: Player position for position-specific bonuses
+        stat_type: Type of stats for proper mapping (optional, auto-detected)
 
     Returns:
         Dict with ppr, standard, and half_ppr point totals
     """
     if not stats or not scoring_settings:
         return {'ppr': 0.0, 'standard': 0.0, 'half_ppr': 0.0}
+
+    # Use unified stat mapping if stat_type is provided
+    if stat_type:
+        from app.services.stat_mapping_service import stat_mapper
+        normalized_stats = stat_mapper.normalize_stats(stats, stat_type, player_position)
+        stats = normalized_stats
 
     # Define comprehensive stat mapping: stat_field -> scoring_setting_key
     stat_mapping = {

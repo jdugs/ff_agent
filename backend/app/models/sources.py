@@ -41,3 +41,4 @@ class Source(Base, TimestampMixin):
     rankings = relationship("Ranking", back_populates="source")
     projections = relationship("PlayerProjection", back_populates="source")
     news_events = relationship("NewsEvent", back_populates="source")
+    player_stats = relationship("PlayerStats", back_populates="source")

@@ -136,6 +136,81 @@ curl -X POST "http://localhost:8000/api/v1/sleeper/league/LEAGUE_ID/sync?user_id
 curl "http://localhost:8000/api/v1/team/LEAGUE_ID/USER_ID"
 ```
 
+## Data Updates and Projections
+
+### NFL Schedule Updates
+
+The system needs current NFL schedule data to show opponent information and game times. Update the schedule for each week:
+
+```bash
+# Sync NFL schedule for current week
+curl -X POST "http://localhost:8000/api/v1/sleeper/sync/schedule/3"
+
+# Check if schedule sync was successful
+curl "http://localhost:8000/api/v1/dashboard/lineup?week=3"
+```
+
+### Player Projections Updates
+
+Keep your projections current with multiple data sources:
+
+#### Option 1: Sleeper Projections (Recommended - Fast & Reliable)
+```bash
+# Sync projections from Sleeper API for week 3
+curl -X POST "http://localhost:8000/api/v1/sleeper/sync/projections/3"
+```
+
+#### Option 2: FantasyPros Projections (Comprehensive)
+```bash
+# Sync projections from FantasyPros (requires API key)
+curl -X POST "http://localhost:8000/api/v1/projections/fantasypros/save?week=3&season=2025"
+```
+
+#### Check Projection Status
+```bash
+# View consensus projections for week 3
+curl "http://localhost:8000/api/v1/projections/consensus?week=3"
+
+# Test projection sources availability
+curl "http://localhost:8000/api/v1/projections/test"
+
+# Check projection sources
+curl "http://localhost:8000/api/v1/projections/sources"
+```
+
+### Weekly Update Workflow
+
+For optimal performance, run this weekly workflow:
+
+1. **Update NFL Schedule**
+   ```bash
+   curl -X POST "http://localhost:8000/api/v1/sleeper/sync/schedule/WEEK_NUMBER"
+   ```
+
+2. **Sync Player Projections**
+   ```bash
+   # Quick update from Sleeper
+   curl -X POST "http://localhost:8000/api/v1/sleeper/sync/projections/WEEK_NUMBER"
+
+   # Enhanced projections from FantasyPros (if API key available)
+   curl -X POST "http://localhost:8000/api/v1/projections/fantasypros/save?week=WEEK_NUMBER&season=2025"
+   ```
+
+3. **Verify Dashboard Data**
+   ```bash
+   curl "http://localhost:8000/api/v1/dashboard/lineup?week=WEEK_NUMBER"
+   ```
+
+### Projection Data Sources
+
+The system supports multiple projection sources:
+
+- **Sleeper**: Fast, reliable, updated frequently
+- **FantasyPros**: Expert consensus, multiple scoring formats
+- **Consensus**: Combined projections from multiple sources
+
+Configure projection weights and sources in the database `sources` table.
+
 ## API Endpoints
 
 ### Core Endpoints
@@ -168,6 +243,18 @@ curl "http://localhost:8000/api/v1/team/LEAGUE_ID/USER_ID"
 - `GET /api/v1/sleeper/user/{user_id}/leagues` - Get user's leagues
 - `POST /api/v1/sleeper/league/{league_id}/sync` - Sync league data
 - `GET /api/v1/sleeper/league/{league_id}/rosters` - Get league rosters
+- `POST /api/v1/sleeper/sync/schedule/{week}` - Sync NFL schedule for week
+- `POST /api/v1/sleeper/sync/projections/{week}` - Sync player projections
+
+### Projections
+
+- `GET /api/v1/projections/test` - Test projection sources
+- `GET /api/v1/projections/sources` - List projection sources
+- `GET /api/v1/projections/consensus` - Get consensus projections
+- `POST /api/v1/projections/fantasypros/save` - Sync FantasyPros projections
+- `GET /api/v1/projections/fantasypros/test` - Test FantasyPros integration
+- `GET /api/v1/projections/mapping/test` - Test player mapping
+- `GET /api/v1/projections/consensus/rankings` - Consensus rankings
 
 ### Team Dashboard
 

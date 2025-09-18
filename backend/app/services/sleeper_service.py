@@ -2,7 +2,9 @@ from typing import Dict, List, Optional
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.integrations.sleeper_api import SleeperAPIClient
-from app.models.sleeper import SleeperLeague, SleeperRoster, SleeperPlayer, SleeperMatchup, SleeperPlayerStats, SleeperPlayerProjections
+from app.models.sleeper import SleeperMatchup, PlayerStats, SleeperPlayerProjections
+from app.models.leagues import League
+from app.models.rosters import Roster
 from app.models.players import Player
 from app.services.player_mapping_service import PlayerMappingService
 from app.utils.scoring import calculate_fantasy_points
@@ -27,7 +29,7 @@ class SleeperService:
             logger.error(f"Failed to find user {username}: {e}")
             return None
     
-    async def sync_user_leagues(self, user_id: str, season: str = settings.default_season) -> List[SleeperLeague]:
+    async def sync_user_leagues(self, user_id: str, season: str = settings.default_season) -> List[League]:
         """Sync all leagues for a user"""
         try:
             leagues_data = await self.client.get_user_leagues(user_id, season)
@@ -44,7 +46,7 @@ class SleeperService:
             logger.error(f"Failed to sync leagues for user {user_id}: {e}")
             return []
     
-    async def sync_league_full(self, league_id: str, user_id: str) -> Optional[SleeperLeague]:
+    async def sync_league_full(self, league_id: str, user_id: str) -> Optional[League]:
         """Fully sync a league including rosters and recent matchups"""
         try:
             # Get league info
@@ -68,7 +70,7 @@ class SleeperService:
             logger.error(f"Failed to sync league {league_id}: {e}")
             return None
     
-    async def sync_league_rosters(self, league_id: str) -> List[SleeperRoster]:
+    async def sync_league_rosters(self, league_id: str) -> List[Roster]:
         """Sync all rosters for a league"""
         try:
             rosters_data = await self.client.get_league_rosters(league_id)
@@ -124,38 +126,35 @@ class SleeperService:
             self.db.rollback()
             return 0
     
-    async def _sync_league(self, league_data: Dict, user_id: str) -> Optional[SleeperLeague]:
+    async def _sync_league(self, league_data: Dict, user_id: str) -> Optional[League]:
         """Sync a single league"""
         try:
-            existing = self.db.query(SleeperLeague).filter(
-                SleeperLeague.league_id == league_data['league_id']
+            existing = self.db.query(League).filter(
+                League.league_id == league_data['league_id']
             ).first()
             
             if existing:
                 # Update existing
                 existing.league_name = league_data.get('name')
                 existing.status = league_data.get('status')
-                existing.settings = league_data.get('settings')
                 existing.scoring_settings = league_data.get('scoring_settings')
                 existing.roster_positions = league_data.get('roster_positions')
-                existing.total_rosters = league_data.get('total_rosters')
+                existing.total_teams = league_data.get('total_rosters')
                 league = existing
             else:
                 # Create new
-                league = SleeperLeague(
+                league = League(
                     league_id=league_data['league_id'],
+                    platform='sleeper',
+                    platform_league_id=league_data['league_id'],
                     user_id=user_id,
-                    sleeper_user_id=user_id,
                     league_name=league_data.get('name'),
                     season=league_data.get('season'),
                     status=league_data.get('status'),
                     sport=league_data.get('sport', 'nfl'),
-                    settings=league_data.get('settings'),
                     scoring_settings=league_data.get('scoring_settings'),
                     roster_positions=league_data.get('roster_positions'),
-                    total_rosters=league_data.get('total_rosters'),
-                    draft_id=league_data.get('draft_id'),
-                    previous_league_id=league_data.get('previous_league_id')
+                    total_teams=league_data.get('total_rosters')
                 )
                 self.db.add(league)
             
@@ -167,11 +166,11 @@ class SleeperService:
             self.db.rollback()
             return None
     
-    def _upsert_roster(self, roster_data: Dict, league_id: str) -> SleeperRoster:
+    def _upsert_roster(self, roster_data: Dict, league_id: str) -> Roster:
         """Insert or update a roster"""
-        existing = self.db.query(SleeperRoster).filter(
-            SleeperRoster.roster_id == roster_data['roster_id'],
-            SleeperRoster.league_id == league_id
+        existing = self.db.query(Roster).filter(
+            Roster.platform_roster_id == roster_data['roster_id'],
+            Roster.league_id == league_id
         ).first()
         
         if existing:
@@ -195,8 +194,8 @@ class SleeperService:
         else:
             # Create new
             settings = roster_data.get('settings', {})
-            roster = SleeperRoster(
-                roster_id=roster_data['roster_id'],
+            roster = Roster(
+                platform_roster_id=roster_data['roster_id'],
                 league_id=league_id,
                 owner_id=roster_data.get('owner_id'),
                 player_ids=roster_data.get('players', []),
@@ -276,8 +275,8 @@ class SleeperService:
         if not full_name and first_name and last_name:
             full_name = f"{first_name} {last_name}"
         
-        existing = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_id
+        existing = self.db.query(Player).filter(
+            Player.player_id == sleeper_id
         ).first()
         
         if existing:
@@ -286,7 +285,11 @@ class SleeperService:
             existing.first_name = first_name
             existing.last_name = last_name
             existing.position = player_data.get('position')
-            existing.team = player_data.get('team')
+            # Handle team code mapping (OAK -> LV)
+            team = player_data.get('team')
+            if team == 'OAK':
+                team = 'LV'
+            existing.team = team
             existing.age = player_data.get('age')
             existing.height = player_data.get('height')
             existing.weight = player_data.get('weight')
@@ -294,6 +297,7 @@ class SleeperService:
             existing.years_exp = player_data.get('years_exp')
             existing.status = mapped_status  # Use mapped status
             existing.fantasy_positions = player_data.get('fantasy_positions', [])
+            existing.sleeper_id = sleeper_id  # Set sleeper_id
             
             # Update external IDs
             existing.espn_id = player_data.get('espn_id')
@@ -303,13 +307,18 @@ class SleeperService:
             existing.stats_id = player_data.get('stats_id')
         else:
             # Create new
-            sleeper_player = SleeperPlayer(
-                sleeper_player_id=sleeper_id,
+            # Handle team code mapping (OAK -> LV)
+            team = player_data.get('team')
+            if team == 'OAK':
+                team = 'LV'
+
+            player = Player(
+                player_id=sleeper_id,
                 full_name=full_name,
                 first_name=first_name,
                 last_name=last_name,
                 position=player_data.get('position'),
-                team=player_data.get('team'),
+                team=team,
                 age=player_data.get('age'),
                 height=player_data.get('height'),
                 weight=player_data.get('weight'),
@@ -317,7 +326,9 @@ class SleeperService:
                 years_exp=player_data.get('years_exp'),
                 status=mapped_status,  # Use mapped status
                 fantasy_positions=player_data.get('fantasy_positions', []),
-                
+                sleeper_id=sleeper_id,
+                primary_data_source='sleeper',
+
                 # External IDs
                 espn_id=player_data.get('espn_id'),
                 rotowire_id=player_data.get('rotowire_id'),
@@ -325,7 +336,7 @@ class SleeperService:
                 yahoo_id=player_data.get('yahoo_id'),
                 stats_id=player_data.get('stats_id')
             )
-            self.db.add(sleeper_player)
+            self.db.add(player)
     
     def _should_sync_player(self, player_data: Dict) -> bool:
         """Determine if we should sync this player"""
@@ -384,16 +395,16 @@ class SleeperService:
 
     async def _upsert_player_stats(self, sleeper_id: str, week: int, season: str, stats: Dict):
         """Insert or update player stats"""        
-        existing = self.db.query(SleeperPlayerStats).filter(
-            SleeperPlayerStats.sleeper_player_id == sleeper_id,
-            SleeperPlayerStats.week == week,
-            SleeperPlayerStats.season == season
+        existing = self.db.query(PlayerStats).filter(
+            PlayerStats.player_id == sleeper_id,
+            PlayerStats.week == week,
+            PlayerStats.season == season
         ).first()
         
         if not existing:
             # Check if player exists in database
-            player_exists = self.db.query(SleeperPlayer).filter(
-                SleeperPlayer.sleeper_player_id == sleeper_id
+            player_exists = self.db.query(Player).filter(
+                Player.player_id == sleeper_id
             ).first()
             
             if not player_exists:
@@ -505,10 +516,12 @@ class SleeperService:
             existing.raw_stats = stats
         else:
             # Create new - using correct Sleeper API field names
-            player_stats = SleeperPlayerStats(
-                sleeper_player_id=sleeper_id,
+            player_stats = PlayerStats(
+                player_id=sleeper_id,
                 week=week,
                 season=season,
+                stat_type='actual',  # These are actual stats from Sleeper
+                source_id=8,  # Sleeper source ID
                 fantasy_points_ppr=ppr_points,
                 fantasy_points_standard=standard_points,
                 fantasy_points_half_ppr=half_ppr_points,
@@ -651,3 +664,73 @@ class SleeperService:
             # Other penalties/bonuses
             'fum_lost', 'pass_sack', 'bonus_rec_te', 'fum_rec_td', 'idp_tkl'
         ])
+
+    def _should_sync_player_projections(self, projections: Dict) -> bool:
+        """Determine if we should sync these player projections"""
+        # Sync if player has any meaningful projections - using correct Sleeper field names
+        return any(projections.get(key, 0) > 0 for key in [
+            # Basic offensive projections - note: Sleeper uses 'pass_yd' not 'pass_yds'
+            'pass_yd', 'rush_yd', 'rec_yd', 'pass_td', 'rush_td', 'rec_td',
+
+            # Kicker projections
+            'fgm', 'xpm', 'fga', 'xpa',
+
+            # Defense projections
+            'sack', 'int', 'fum_rec', 'def_td', 'safe',
+
+            # Fantasy points projections
+            'pts_ppr', 'pts_std', 'pts_half_ppr'
+        ])
+
+    def _upsert_player_projections(self, sleeper_id: str, week: int, season: str, projections: Dict):
+        """Insert or update player projections"""
+        from app.models.sleeper import SleeperPlayerProjections
+
+        existing = self.db.query(SleeperPlayerProjections).filter(
+            SleeperPlayerProjections.sleeper_player_id == sleeper_id,
+            SleeperPlayerProjections.week == week,
+            SleeperPlayerProjections.season == season
+        ).first()
+
+        if existing:
+            # Update existing projections
+            existing.projected_points_ppr = projections.get('projected_points_ppr', 0)
+            existing.projected_points_standard = projections.get('projected_points_standard', 0)
+            existing.projected_points_half_ppr = projections.get('projected_points_half_ppr', 0)
+            # Use correct Sleeper projection field names
+            existing.proj_pass_yds = projections.get('pass_yd', 0)  # Note: 'yd' not 'yds'
+            existing.proj_pass_tds = projections.get('pass_td', 0)
+            existing.proj_rush_yds = projections.get('rush_yd', 0)
+            existing.proj_rush_tds = projections.get('rush_td', 0)
+            existing.proj_rec_yds = projections.get('rec_yd', 0)
+            existing.proj_rec_tds = projections.get('rec_td', 0)
+            existing.proj_rec = projections.get('rec', 0)
+            existing.raw_projections = projections  # Store raw data
+        else:
+            # Check if player exists
+            player_exists = self.db.query(Player).filter(
+                Player.player_id == sleeper_id
+            ).first()
+
+            if not player_exists:
+                logger.error(f"Player {sleeper_id} not found in database, skipping projections sync")
+                return
+
+            # Create new projections
+            player_projections = SleeperPlayerProjections(
+                sleeper_player_id=sleeper_id,
+                week=week,
+                season=season,
+                projected_points_ppr=projections.get('projected_points_ppr', 0),
+                projected_points_standard=projections.get('projected_points_standard', 0),
+                projected_points_half_ppr=projections.get('projected_points_half_ppr', 0),
+                proj_pass_yds=projections.get('pass_yd', 0),
+                proj_pass_tds=projections.get('pass_td', 0),
+                proj_rush_yds=projections.get('rush_yd', 0),
+                proj_rush_tds=projections.get('rush_td', 0),
+                proj_rec_yds=projections.get('rec_yd', 0),
+                proj_rec_tds=projections.get('rec_td', 0),
+                proj_rec=projections.get('rec', 0),
+                raw_projections=projections
+            )
+            self.db.add(player_projections)

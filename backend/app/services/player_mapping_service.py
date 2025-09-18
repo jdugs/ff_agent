@@ -1,7 +1,7 @@
 from typing import Optional, Dict, List
 from sqlalchemy.orm import Session
 from app.models.players import Player
-from app.models.sleeper import SleeperPlayer
+# SleeperPlayer is now consolidated into Player model
 from app.models.api_logs import PlayerIDMapping
 from difflib import SequenceMatcher
 import logging
@@ -26,8 +26,8 @@ class PlayerMappingService:
             return self.db.query(Player).filter(Player.player_id == mapping.our_player_id).first()
         
         # Try to create mapping
-        sleeper_player = self.db.query(SleeperPlayer).filter(
-            SleeperPlayer.sleeper_player_id == sleeper_player_id
+        sleeper_player = self.db.query(Player).filter(
+            Player.player_id == sleeper_player_id
         ).first()
         
         if not sleeper_player:
@@ -43,7 +43,7 @@ class PlayerMappingService:
         
         return None
     
-    def _find_matching_player(self, sleeper_player: SleeperPlayer) -> Optional[Player]:
+    def _find_matching_player(self, sleeper_player: Player) -> Optional[Player]:
         """Find matching player in our database"""
         if not sleeper_player.full_name or not sleeper_player.position:
             return None
@@ -92,8 +92,8 @@ class PlayerMappingService:
         """Get player details for a list of Sleeper player IDs"""
         players = []
         for sleeper_id in player_ids:
-            sleeper_player = self.db.query(SleeperPlayer).filter(
-                SleeperPlayer.sleeper_player_id == sleeper_id
+            sleeper_player = self.db.query(Player).filter(
+                Player.player_id == sleeper_id
             ).first()
             
             if sleeper_player:

@@ -1,13 +1,15 @@
 from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
+from sqlalchemy import and_, or_
 from app.services.projection_service import ProjectionService
 from app.services.player_id_mapping_service import PlayerIDMappingService
 from app.services.projection_sources import ProviderManager
 from app.config import settings
 import logging
-from datetime import datetime
+from datetime import datetime, timedelta
 from dataclasses import dataclass, field
 from statistics import mean, harmonic_mean
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -45,27 +47,37 @@ class ProjectionAggregationService:
         self.provider_manager = ProviderManager()
     
     async def create_consensus_projections(
-        self, 
-        week: Optional[int] = None, 
+        self,
+        week: Optional[int] = None,
         season: Optional[str] = None,
-        position_filter: Optional[str] = None
+        position_filter: Optional[str] = None,
+        force_refresh: bool = False
     ) -> Dict[str, ConsensusProjection]:
         """
         Create consensus projections by aggregating data from multiple providers
-        
+
         Args:
             week: NFL week (for weekly projections)
             season: NFL season (defaults to current season)
             position_filter: Optional position filter (QB, RB, WR, TE)
-            
+            force_refresh: Force regeneration even if cache exists
+
         Returns:
             Dict mapping sleeper_id to ConsensusProjection
         """
-        
+
         if not season:
             season = settings.default_season
-        
+
+        # Check cache first (unless force_refresh is True)
+        if not force_refresh:
+            cached_projections = self._get_cached_consensus_projections(week, season, position_filter)
+            if cached_projections:
+                logger.info(f"Returning cached consensus projections for {'week ' + str(week) if week else 'season'} {season}")
+                return cached_projections
+
         logger.info(f"Creating consensus projections for {'week ' + str(week) if week else 'season'} {season}")
+        start_time = time.time()
         
         # Step 1: Collect projections from all providers (using saved data where available)
         raw_projections = {}
@@ -117,10 +129,14 @@ class ProjectionAggregationService:
             }
         
         logger.info(f"Created consensus projections for {len(consensus_projections)} players")
-        
+
+        # Cache the results for future use
+        generation_time_ms = int((time.time() - start_time) * 1000)
+        self._cache_consensus_projections(consensus_projections, week, season, position_filter, generation_time_ms)
+
         # Cleanup
         await self.projection_service.close()
-        
+
         return consensus_projections
     
     def _normalize_all_projections(self, raw_projections: Dict[str, Any]) -> List[PlayerProjection]:
@@ -201,7 +217,7 @@ class ProjectionAggregationService:
             projections = fp_data.get('projections', {})
             
             return PlayerProjection(
-                sleeper_id=sleeper_player.sleeper_player_id,
+                sleeper_id=sleeper_player.player_id,
                 provider='fantasypros',
                 player_name=sleeper_player.full_name or fp_data.get('player_name', ''),
                 team=sleeper_player.team or fp_data.get('team', ''),
@@ -338,3 +354,166 @@ class ProjectionAggregationService:
             'position_breakdown': position_counts,
             'total_individual_projections': total_projections
         }
+
+    def _get_cached_consensus_projections(
+        self,
+        week: Optional[int] = None,
+        season: Optional[str] = None,
+        position_filter: Optional[str] = None
+    ) -> Optional[Dict[str, ConsensusProjection]]:
+        """Get cached consensus projections if they exist and are fresh"""
+        from app.models.consensus_projections import ConsensusProjections
+
+        # Check for cached projections that haven't expired
+        query = self.db.query(ConsensusProjections).filter(
+            and_(
+                ConsensusProjections.week == week,
+                ConsensusProjections.season == season,
+                ConsensusProjections.position_filter == position_filter,
+                ConsensusProjections.cache_expires_at > datetime.now(),
+                ConsensusProjections.is_stale == False
+            )
+        )
+
+        cached_rows = query.all()
+        if not cached_rows:
+            return None
+
+        # Convert cached rows back to ConsensusProjection objects
+        consensus_projections = {}
+        for row in cached_rows:
+            individual_projections = []
+            for individual_data in row.get_individual_projections():
+                individual_projections.append(PlayerProjection(
+                    sleeper_id=individual_data['sleeper_id'],
+                    provider=individual_data['provider'],
+                    player_name=individual_data['player_name'],
+                    team=individual_data['team'],
+                    position=individual_data['position'],
+                    projections=individual_data['projections'],
+                    weight=individual_data['weight']
+                ))
+
+            consensus_projections[row.sleeper_player_id] = ConsensusProjection(
+                sleeper_id=row.sleeper_player_id,
+                player_name=row.player_name,
+                team=row.team,
+                position=row.position,
+                consensus_projections=row.get_raw_consensus_projections(),
+                provider_count=row.provider_count,
+                total_weight=row.total_weight,
+                individual_projections=individual_projections
+            )
+
+        logger.info(f"Found {len(consensus_projections)} cached consensus projections")
+        return consensus_projections
+
+    def _cache_consensus_projections(
+        self,
+        consensus_projections: Dict[str, ConsensusProjection],
+        week: Optional[int] = None,
+        season: Optional[str] = None,
+        position_filter: Optional[str] = None,
+        generation_time_ms: int = 0
+    ):
+        """Cache consensus projections for future use"""
+        from app.models.consensus_projections import ConsensusProjections
+
+        # Clear existing cache for this query
+        self.db.query(ConsensusProjections).filter(
+            and_(
+                ConsensusProjections.week == week,
+                ConsensusProjections.season == season,
+                ConsensusProjections.position_filter == position_filter
+            )
+        ).delete()
+
+        # Cache expires in 30 minutes for current week, 4 hours for future weeks
+        cache_duration_hours = 0.5 if week and week <= 3 else 4
+        cache_expires_at = datetime.now() + timedelta(hours=cache_duration_hours)
+
+        # Store each consensus projection
+        for sleeper_id, consensus in consensus_projections.items():
+            # Prepare individual projections for storage
+            individual_data = []
+            for proj in consensus.individual_projections:
+                individual_data.append({
+                    'sleeper_id': proj.sleeper_id,
+                    'provider': proj.provider,
+                    'player_name': proj.player_name,
+                    'team': proj.team,
+                    'position': proj.position,
+                    'projections': proj.projections,
+                    'weight': proj.weight
+                })
+
+            # Extract common projection fields
+            proj_dict = consensus.consensus_projections
+
+            cached_projection = ConsensusProjections(
+                week=week,
+                season=season,
+                position_filter=position_filter,
+                sleeper_player_id=sleeper_id,
+                player_name=consensus.player_name,
+                team=consensus.team,
+                position=consensus.position,
+                fantasy_points=proj_dict.get('fantasy_points', 0),
+                fantasy_points_standard=proj_dict.get('fantasy_points_standard', 0),
+                fantasy_points_half_ppr=proj_dict.get('fantasy_points_half_ppr', 0),
+                passing_yards=proj_dict.get('passing_yards', 0),
+                passing_tds=proj_dict.get('passing_tds', 0),
+                passing_interceptions=proj_dict.get('passing_interceptions', 0),
+                rushing_yards=proj_dict.get('rushing_yards', 0),
+                rushing_tds=proj_dict.get('rushing_tds', 0),
+                receiving_yards=proj_dict.get('receiving_yards', 0),
+                receiving_tds=proj_dict.get('receiving_tds', 0),
+                receptions=proj_dict.get('receptions', 0),
+                field_goals_made=proj_dict.get('field_goals_made', 0),
+                field_goals_attempted=proj_dict.get('field_goals_attempted', 0),
+                extra_points_made=proj_dict.get('extra_points_made', 0),
+                sacks=proj_dict.get('sacks', 0),
+                interceptions=proj_dict.get('interceptions', 0),
+                fumble_recoveries=proj_dict.get('fumble_recoveries', 0),
+                defensive_tds=proj_dict.get('defensive_tds', 0),
+                provider_count=consensus.provider_count,
+                total_weight=consensus.total_weight,
+                confidence_score=consensus.total_weight / consensus.provider_count if consensus.provider_count > 0 else 0,
+                cache_expires_at=cache_expires_at,
+                is_stale=False,
+                generation_duration_ms=generation_time_ms
+            )
+
+            # Store JSON data
+            cached_projection.set_raw_consensus_projections(consensus.consensus_projections)
+            cached_projection.set_individual_projections(individual_data)
+
+            self.db.add(cached_projection)
+
+        try:
+            self.db.commit()
+            logger.info(f"Cached {len(consensus_projections)} consensus projections, expires at {cache_expires_at}")
+        except Exception as e:
+            logger.error(f"Failed to cache consensus projections: {e}")
+            self.db.rollback()
+
+    def invalidate_cache(
+        self,
+        week: Optional[int] = None,
+        season: Optional[str] = None,
+        position_filter: Optional[str] = None
+    ):
+        """Mark cached projections as stale"""
+        from app.models.consensus_projections import ConsensusProjections
+
+        query = self.db.query(ConsensusProjections)
+        if week is not None:
+            query = query.filter(ConsensusProjections.week == week)
+        if season is not None:
+            query = query.filter(ConsensusProjections.season == season)
+        if position_filter is not None:
+            query = query.filter(ConsensusProjections.position_filter == position_filter)
+
+        query.update({ConsensusProjections.is_stale: True})
+        self.db.commit()
+        logger.info(f"Invalidated consensus projection cache for week={week}, season={season}, position={position_filter}")
